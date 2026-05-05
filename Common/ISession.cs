@@ -1,22 +1,23 @@
-﻿using System;
+﻿using Common.Enums;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.ServiceModel;
 using System.Text;
 using System.Threading.Tasks;
-using Common;
-namespace Client
+
+namespace Common
 {
     [ServiceContract]
     public interface ISession
     {
         [OperationContract]
-        bool StartSession(Meta meta);
+        ServerMessage StartSession(Meta meta);
 
         [OperationContract]
-        bool PushSample(MotorSample sample);
+        ServerMessage PushSample(MotorSample sample);
 
         [OperationContract]
-        bool EndSession();
+        ServerMessage EndSession();
     }
 }
