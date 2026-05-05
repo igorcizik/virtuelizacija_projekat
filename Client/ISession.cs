@@ -4,19 +4,19 @@ using System.Linq;
 using System.ServiceModel;
 using System.Text;
 using System.Threading.Tasks;
-
+using Common;
 namespace Client
 {
     [ServiceContract]
     public interface ISession
     {
         [OperationContract]
-        public bool StartSession(Meta meta);
+        bool StartSession(Meta meta);
 
         [OperationContract]
-        public bool PushSample(MotorSample sample);
+        bool PushSample(MotorSample sample);
 
         [OperationContract]
-        public bool EndSession();
+        bool EndSession();
     }
 }
