@@ -1,62 +1,69 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Common;
+﻿using Common;
 using Common.Enums;
+using System;
 using System.Configuration;
+using System.Globalization;
 using System.ServiceModel;
-using System.ServiceModel.Channels;
+
 namespace Service
 {
-    public class SessionService : Common.ISession
+    public class SessionService : ISession
     {
-        private static int broj = 0;
-        private static double tekucaSumaW = 0;
-        private static double tekucaSumaT = 0;
-        private static double tekucaSumaPM = 0;
-        private static int tekuciBrojSemplova = 0;
+        // Koristimo statičku promenljivu jer se u praktikumu objekat servisa instancira PerCall.
+        // Static obezbeđuje da svi pozivi (metoda) dele isto stanje sesije.
+        private static SessionStatus? currentStatus = null;
+        private double statorWThreshold;
+
+        public SessionService()
+        {
+            // Čitanje iz App.config (poglavlje "Konfiguracija WCF servisa" iz praktikuma)
+            statorWThreshold = double.Parse(ConfigurationManager.AppSettings["Stator_w_threshold"], CultureInfo.InvariantCulture);
+        }
 
         public ServerMessage StartSession(Meta meta)
         {
-            throw new NotImplementedException();
+            currentStatus = SessionStatus.IN_PROGRESS;
+            Console.WriteLine("\n[SERVER] Status: IN_PROGRESS");
+            Console.WriteLine($"[SERVER] Sesija uspešno inicijalizovana za Profile_ID: {meta.Profile_ID}");
+            return ServerMessage.ACK;
         }
 
         public ServerMessage PushSample(MotorSample sample)
         {
-            tekucaSumaW += sample.Stator_Winding;
-            tekucaSumaT += sample.Stator_Tooth;
-            tekucaSumaPM += sample.PM;
-            broj++;
-            var w_threshold = ConfigurationManager.AppSettings["Stator_w_threshold"];
-            var t_threshold = ConfigurationManager.AppSettings["Stator_t_threshold"];
-            var pm_threshold = ConfigurationManager.AppSettings["PM_threshold"];
-
-
-
-            if ((sample.Stator_Winding > Double.Parse(w_threshold)) || (sample.Stator_Winding * 0.75 < tekucaSumaW / broj) || (sample.Stator_Winding * 1.25 > tekucaSumaW / broj))
+            // Provera da li je sesija aktivna
+            if (currentStatus != SessionStatus.IN_PROGRESS)
             {
-                throw new FaultException<ValidationFault>(new ValidationFault { Message = "Invalid input for stator winding" });
-
+                Console.WriteLine("[SERVER] Greška: Pokušaj slanja uzorka pre pokretanja sesije.");
+                return ServerMessage.NACK;
             }
-            else if (sample.Stator_Tooth > Double.Parse(t_threshold) || (sample.Stator_Tooth * 0.75 < tekucaSumaT / broj) || (sample.Stator_Tooth * 1.25 > tekucaSumaT / broj))
+
+            // Validacija opsega (Zadatak 3) - bacanje FaultException-a iz praktikuma
+            if (sample.PM <= 0 || sample.Stator_Winding <= 0 || sample.Stator_Tooth <= 0 || sample.Stator_Yoke <= 0)
             {
-                throw new FaultException<ValidationFault>(new ValidationFault { Message = "Invalid input for stator tooth" });
+                throw new FaultException<ValidationFault>(
+                    new ValidationFault("Vrednosti senzora moraju biti veće od 0."));
             }
-            else if(sample.PM > Double.Parse(pm_threshold) || (sample.PM * 0.75 < tekucaSumaPM / broj) || (sample.PM * 1.25 > tekucaSumaPM / broj))
+
+            // Provera praga iz konfiguracije
+            if (sample.Stator_Winding > statorWThreshold)
             {
-                throw new FaultException<ValidationFault>(new ValidationFault { Message = "Invalid input for PM" });
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"[SERVER] Stator Winding prešao prag: {sample.Stator_Winding} > {statorWThreshold}");
+            }
+            else
+            {
+                Console.WriteLine($"[SERVER] Uzorak uspešan -> PM: {sample.PM}, Stator Winding: {sample.Stator_Winding}");
             }
 
             return ServerMessage.ACK;
-
         }
 
         public ServerMessage EndSession()
         {
-            throw new NotImplementedException();
+            currentStatus = SessionStatus.COMPLETED;
+            Console.WriteLine("[SERVER] Status promenjen u: COMPLETED");
+            Console.WriteLine("[SERVER] Sesija uspešno zatvorena.\n");
+            return ServerMessage.ACK;
         }
     }
-
 }
