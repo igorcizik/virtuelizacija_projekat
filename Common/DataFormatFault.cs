@@ -12,5 +12,10 @@ namespace Common
     {
         [DataMember]
         string Message { get; set; }
+
+        public DataFormatFault(string message) 
+        {
+            Message = message; 
+        }
     }
 }
