@@ -45,7 +45,6 @@
   <ItemGroup>
     <Compile Include="Class1.cs" />
     <Compile Include="DataFormatFault.cs" />
-    <Compile Include="Enums\ClientMessage.cs" />
     <Compile Include="Enums\ServerMessage.cs" />
     <Compile Include="Enums\SessionStatus.cs" />
     <Compile Include="ISession.cs" />

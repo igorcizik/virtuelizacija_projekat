@@ -1,10 +1,5 @@
-﻿using Common.Enums;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.ServiceModel;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.ServiceModel;
+using Common.Enums;
 
 namespace Common
 {
@@ -12,9 +7,12 @@ namespace Common
     public interface ISession
     {
         [OperationContract]
+        [FaultContract(typeof(DataFormatFault))]
+        [FaultContract(typeof(ValidationFault))]
         ServerMessage StartSession(Meta meta);
 
         [OperationContract]
+        [FaultContract(typeof(ValidationFault))]
         ServerMessage PushSample(MotorSample sample);
 
         [OperationContract]

@@ -13,5 +13,9 @@ namespace Common
         [DataMember]
         public string Message { get; set; }
 
+        public ValidationFault(string message)
+        {
+            Message = message;
+        }
     }
 }
