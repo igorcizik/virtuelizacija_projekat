@@ -9,14 +9,12 @@ namespace Service
 {
     public class SessionService : ISession
     {
-        // Koristimo statičku promenljivu jer se u praktikumu objekat servisa instancira PerCall.
-        // Static obezbeđuje da svi pozivi (metoda) dele isto stanje sesije.
+        
         private static SessionStatus? currentStatus = null;
         private double statorWThreshold;
 
         public SessionService()
         {
-            // Čitanje iz App.config (poglavlje "Konfiguracija WCF servisa" iz praktikuma)
             statorWThreshold = double.Parse(ConfigurationManager.AppSettings["Stator_w_threshold"], CultureInfo.InvariantCulture);
         }
 
@@ -37,22 +35,20 @@ namespace Service
                 return ServerMessage.NACK;
             }
 
-            // Validacija opsega (Zadatak 3) - bacanje FaultException-a iz praktikuma
             if (sample.PM <= 0 || sample.Stator_Winding <= 0 || sample.Stator_Tooth <= 0 || sample.Stator_Yoke <= 0)
             {
                 throw new FaultException<ValidationFault>(
                     new ValidationFault("Vrednosti senzora moraju biti veće od 0."));
             }
 
-            // Provera praga iz konfiguracije
+      
             if (sample.Stator_Winding > statorWThreshold)
             {
-                Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine($"[SERVER] Stator Winding prešao prag: {sample.Stator_Winding} > {statorWThreshold}");
             }
             else
             {
-                Console.WriteLine($"[SERVER] Uzorak uspešan -> PM: {sample.PM}, Stator Winding: {sample.Stator_Winding}");
+                Console.WriteLine($"[SERVER] Uzorak uspešan");
             }
 
             return ServerMessage.ACK;

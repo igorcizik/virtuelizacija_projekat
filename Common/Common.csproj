@@ -43,7 +43,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Class1.cs" />
     <Compile Include="DataFormatFault.cs" />
     <Compile Include="Enums\ServerMessage.cs" />
     <Compile Include="Enums\SessionStatus.cs" />
