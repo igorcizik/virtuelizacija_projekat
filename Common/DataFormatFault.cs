@@ -11,8 +11,9 @@ namespace Common
     public class DataFormatFault
     {
         [DataMember]
-        string Message { get; set; }
+       public string Message { get; set; }
 
+        public DataFormatFault() { }
         public DataFormatFault(string message) 
         {
             Message = message; 

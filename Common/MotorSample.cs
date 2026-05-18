@@ -20,13 +20,18 @@ namespace Common
         [DataMember]
         public double PM {  get; set; }
         [DataMember]
-        public double Profile_ID {  get; set; }
+        public int Profile_ID {  get; set; }
         [DataMember]
         public double Ambient {  get; set; }
         [DataMember]
         public double Torque { get; set; }
 
-        public MotorSample(double stator_Winding, double stator_Tooth, double stator_Yoke, double pM, double profile_ID, double ambient, double torque)
+        public MotorSample()
+        {
+
+        }
+
+        public MotorSample(double stator_Winding, double stator_Tooth, double stator_Yoke, double pM, int profile_ID, double ambient, double torque)
         {
             Stator_Winding = stator_Winding;
             Stator_Tooth = stator_Tooth;

@@ -11,27 +11,32 @@ namespace Common
     public class Meta
     {
         [DataMember]
-        public double Stator_Winding { get; set; }
+        public bool Stator_Winding { get; set; }
         
         [DataMember]
-        public double Stator_Tooth { get; set; }
+        public bool Stator_Tooth { get; set; }
         
         [DataMember]
-        public double Stator_Yoke { get; set; }
+        public bool Stator_Yoke { get; set; }
 
         [DataMember]    
-        public double PM { get; set; }
+        public bool PM { get; set; }
 
         [DataMember]
-        public double Profile_ID { get; set; }
+        public bool Profile_ID { get; set; }
 
         [DataMember]
-        public double Ambient { get; set; }
+        public bool Ambient { get; set; }
 
         [DataMember]
-        public double Torque { get; set; }
+        public bool Torque { get; set; }
 
-        public Meta(double stator_Winding, double stator_Tooth, double stator_Yoke, double pM, double profile_ID, double ambient, double torque)
+        public Meta()
+        {
+            
+        }
+
+        public Meta(bool stator_Winding, bool stator_Tooth, bool stator_Yoke, bool pM, bool profile_ID, bool ambient, bool torque)
         {
             Stator_Winding = stator_Winding;
             Stator_Tooth = stator_Tooth;
