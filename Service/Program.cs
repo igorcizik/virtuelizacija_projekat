@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.ServiceModel;
 
 namespace Service
 {
@@ -10,6 +7,13 @@ namespace Service
     {
         static void Main(string[] args)
         {
+            using (ServiceHost host = new ServiceHost(typeof(SessionService)))
+            {
+            
+                host.Open();
+                Console.WriteLine("[SERVER] WCF Servis je uspešno pokrenut i spreman za rad.");
+                Console.ReadLine();
+            }
         }
     }
 }
