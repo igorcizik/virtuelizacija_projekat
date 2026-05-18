@@ -4,3 +4,9 @@ C:\Users\igorc\source\repos\virtuelizacija_projekat1\Common\obj\Debug\Common.csp
 C:\Users\igorc\source\repos\virtuelizacija_projekat1\Common\obj\Debug\Common.csproj.CoreCompileInputs.cache
 C:\Users\igorc\source\repos\virtuelizacija_projekat1\Common\obj\Debug\Common.dll
 C:\Users\igorc\source\repos\virtuelizacija_projekat1\Common\obj\Debug\Common.pdb
+C:\Users\Nemanja\Desktop\Virtuelizacija\Common\bin\Debug\Common.dll
+C:\Users\Nemanja\Desktop\Virtuelizacija\Common\bin\Debug\Common.pdb
+C:\Users\Nemanja\Desktop\Virtuelizacija\Common\obj\Debug\Common.csproj.AssemblyReference.cache
+C:\Users\Nemanja\Desktop\Virtuelizacija\Common\obj\Debug\Common.csproj.CoreCompileInputs.cache
+C:\Users\Nemanja\Desktop\Virtuelizacija\Common\obj\Debug\Common.dll
+C:\Users\Nemanja\Desktop\Virtuelizacija\Common\obj\Debug\Common.pdb

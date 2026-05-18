@@ -11,7 +11,7 @@ namespace Service
             {
             
                 host.Open();
-                Console.WriteLine("[SERVER] WCF Servis je uspešno pokrenut i spreman za rad.");
+                Console.WriteLine("WCF Servis je uspešno pokrenut i spreman za rad.");
                 Console.ReadLine();
             }
         }

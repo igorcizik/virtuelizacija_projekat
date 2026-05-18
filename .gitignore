@@ -1,0 +1,16 @@
+# Build folders
+bin/
+obj/
+**/bin/
+**/obj/
+
+# CSV input/output files
+measures.csv
+measures_v2.csv
+Client/measures_v2.csv
+Client/bin/Debug/measures_v2.csv
+
+# Runtime logs/output
+Client/bin/Debug/csv_import_log.txt
+Service/bin/Debug/ServerStorage/rejects.csv
+Service/bin/Debug/ServerStorage/measurements_session.csv

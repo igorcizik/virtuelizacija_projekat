@@ -8,3 +8,15 @@ C:\Users\igorc\source\repos\virtuelizacija_projekat1\Client\obj\Debug\Client.csp
 C:\Users\igorc\source\repos\virtuelizacija_projekat1\Client\obj\Debug\Client.csproj.Up2Date
 C:\Users\igorc\source\repos\virtuelizacija_projekat1\Client\obj\Debug\Client.exe
 C:\Users\igorc\source\repos\virtuelizacija_projekat1\Client\obj\Debug\Client.pdb
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\bin\Debug\measures_v2.csv
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\bin\Debug\Client.exe.config
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\bin\Debug\Client.exe
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\bin\Debug\Client.pdb
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\bin\Debug\Common.dll
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\bin\Debug\Common.pdb
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\obj\Debug\Client.csproj.AssemblyReference.cache
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\obj\Debug\Client.exe.config
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\obj\Debug\Client.csproj.CoreCompileInputs.cache
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\obj\Debug\Client.csproj.Up2Date
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\obj\Debug\Client.exe
+C:\Users\Nemanja\Desktop\Virtuelizacija\Client\obj\Debug\Client.pdb
