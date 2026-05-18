@@ -5,7 +5,7 @@ namespace Client.Logs
 {
     public class ClientCsvLogWriter : IDisposable
     {
-        private TextWriter textWriter;
+        private StreamWriter streamWriter;
         private bool disposed = false;
         private readonly string path;
 
@@ -30,7 +30,7 @@ namespace Client.Logs
                 Directory.CreateDirectory(directory);
             }
 
-            textWriter = File.AppendText(path);
+            streamWriter = new StreamWriter(path, false);
         }
 
         ~ClientCsvLogWriter()
@@ -50,11 +50,12 @@ namespace Client.Logs
             {
                 if (disposing)
                 {
-                    if (textWriter != null)
+                    if (streamWriter != null)
                     {
-                        textWriter.Dispose();
-                        textWriter = null;
-                        Console.WriteLine("[DISPOSE] CSV log writer je zatvoren.");
+                        streamWriter.Flush();
+                        streamWriter.Dispose();
+                        streamWriter = null;
+                        Console.WriteLine("CSV log writer je zatvoren.");
                     }
                 }
 
@@ -65,22 +66,34 @@ namespace Client.Logs
         public void WriteInvalidRow(int rowNumber, string line, string reason)
         {
             ThrowIfDisposed();
-            textWriter.WriteLine($"INVALID ROW | Row: {rowNumber} | Reason: {reason} | Data: {line}");
-            textWriter.Flush();
+
+            streamWriter.WriteLine(
+                $"INVALID ROW | Row: {rowNumber} | Reason: {reason} | Data: {line}"
+            );
+
+            streamWriter.Flush();
         }
 
         public void WriteExcessRow(int rowNumber, string line)
         {
             ThrowIfDisposed();
-            textWriter.WriteLine($"EXCESS ROW | Row: {rowNumber} | Data: {line}");
-            textWriter.Flush();
+
+            streamWriter.WriteLine(
+                $"EXCESS ROW | Row: {rowNumber} | Data: {line}"
+            );
+
+            streamWriter.Flush();
         }
 
         public void WriteInfo(string message)
         {
             ThrowIfDisposed();
-            textWriter.WriteLine($"INFO | {DateTime.Now:yyyy-MM-dd HH:mm:ss} | {message}");
-            textWriter.Flush();
+
+            streamWriter.WriteLine(
+                $"INFO | {DateTime.Now:yyyy-MM-dd HH:mm:ss} | {message}"
+            );
+
+            streamWriter.Flush();
         }
 
         private void ThrowIfDisposed()

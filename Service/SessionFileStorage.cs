@@ -78,14 +78,14 @@ namespace Service.Storage
                     {
                         measurementsWriter.Dispose();
                         measurementsWriter = null;
-                        Console.WriteLine("[DISPOSE] measurements_session.csv writer je zatvoren.");
+                        Console.WriteLine("measurements_session.csv writer je zatvoren.");
                     }
 
                     if (rejectsWriter != null)
                     {
                         rejectsWriter.Dispose();
                         rejectsWriter = null;
-                        Console.WriteLine("[DISPOSE] rejects.csv writer je zatvoren.");
+                        Console.WriteLine("rejects.csv writer je zatvoren.");
                     }
                 }
 

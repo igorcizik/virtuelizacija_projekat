@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.ServiceModel;
+using System.Threading;
 
 namespace Client
 {
@@ -22,31 +23,45 @@ namespace Client
                 int maxRows = int.Parse(ConfigurationManager.AppSettings["Max_rows"]);
 
                 List<MotorSample> samples;
-
+                Console.WriteLine("Client spreman za slanje podataka");
                 using (MotorCsvReader reader = new MotorCsvReader(csvPath, csvLogPath, maxRows))
                 {
+                    Console.WriteLine("Ucitavanje podataka...");
                     samples = reader.ReadFirstValidSamples();
+
+                    factory = new ChannelFactory<ISession>("SessionService");
+                    proxy = factory.CreateChannel();
+
+                    Meta meta = new Meta(true, true, true, true, true, true, true);
+
+                    ServerMessage startMessage = proxy.StartSession(meta);
+                    Console.WriteLine("StartSession: " + startMessage);
+
+                    int counter = 0;
+                    Console.WriteLine("Slanje podataka...");
+                    Thread.Sleep(500);
+                    foreach (MotorSample sample in samples)
+                    {
+                        counter++;
+
+                        Console.WriteLine();
+                        Console.WriteLine($"Šaljem sample #{counter}...");
+
+                        ServerMessage response = proxy.PushSample(sample);
+
+                        Console.WriteLine($"Odgovor za sample #{counter}: " + response);
+
+                        Thread.Sleep(100);
+                    }
+
+                    ServerMessage endMessage = proxy.EndSession();
+                    Console.WriteLine("EndSession: " + endMessage);
+
+                    ((IClientChannel)proxy).Close();
+                    factory.Close();
                 }
 
-                factory = new ChannelFactory<ISession>("SessionService");
-                proxy = factory.CreateChannel();
-
-                Meta meta = new Meta(true, true, true, true, true, true, true);
-
-                ServerMessage startMessage = proxy.StartSession(meta);
-                Console.WriteLine("StartSession: " + startMessage);
-
-                foreach (MotorSample sample in samples)
-                {
-                    ServerMessage response = proxy.PushSample(sample);
-                    Console.WriteLine("PushSample: " + response);
-                }
-
-                ServerMessage endMessage = proxy.EndSession();
-                Console.WriteLine("EndSession: " + endMessage);
-
-                ((IClientChannel)proxy).Close();
-                factory.Close();
+                
             }
             catch (Exception e)
             {
@@ -55,13 +70,13 @@ namespace Client
                 if (proxy != null)
                 {
                     ((IClientChannel)proxy).Abort();
-                    Console.WriteLine("[DISPOSE] WCF kanal je zatvoren preko Abort.");
+                    Console.WriteLine("WCF kanal je zatvoren preko Abort.");
                 }
 
                 if (factory != null)
                 {
                     factory.Abort();
-                    Console.WriteLine("[DISPOSE] ChannelFactory je zatvoren preko Abort.");
+                    Console.WriteLine("ChannelFactory je zatvoren preko Abort.");
                 }
             }
 

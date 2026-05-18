@@ -66,7 +66,7 @@ namespace Client.Readers
                     {
                         textReader.Dispose();
                         textReader = null;
-                        Console.WriteLine("[DISPOSE] CSV reader je zatvoren.");
+                        Console.WriteLine("CSV reader je zatvoren.");
                     }
 
                     if (logWriter != null)
