@@ -80,7 +80,7 @@ namespace Client.Readers
             }
         }
 
-        public List<MotorSample> ReadFirstValidSamples()
+        public List<MotorSample> ReadFirstParsableSamples()
         {
             ThrowIfDisposed();
 
@@ -104,12 +104,14 @@ namespace Client.Readers
 
             string line;
             int rowNumber = 1;
+            int processedDataRows = 0;
 
             while ((line = textReader.ReadLine()) != null)
             {
                 rowNumber++;
+                processedDataRows++;
 
-                if (samples.Count >= maxValidRows)
+                if (processedDataRows > maxValidRows)
                 {
                     logWriter.WriteExcessRow(rowNumber, line);
                     continue;

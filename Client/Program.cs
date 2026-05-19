@@ -27,19 +27,20 @@ namespace Client
                 using (MotorCsvReader reader = new MotorCsvReader(csvPath, csvLogPath, maxRows))
                 {
                     Console.WriteLine("Ucitavanje podataka...");
-                    samples = reader.ReadFirstValidSamples();
+                    samples = reader.ReadFirstParsableSamples();
 
                     factory = new ChannelFactory<ISession>("SessionService");
                     proxy = factory.CreateChannel();
 
                     Meta meta = new Meta(true, true, true, true, true, true, true);
 
-                    ServerMessage startMessage = proxy.StartSession(meta);
-                    Console.WriteLine("StartSession: " + startMessage);
+                    SessionResponse startResponse = proxy.StartSession(meta);
+                    Console.WriteLine("StartSession: " + startResponse.Message + ", Status: " + startResponse.Status + ", Details: " + startResponse.Details);
 
                     int counter = 0;
                     Console.WriteLine("Slanje podataka...");
                     Thread.Sleep(500);
+
                     foreach (MotorSample sample in samples)
                     {
                         counter++;
@@ -47,15 +48,14 @@ namespace Client
                         Console.WriteLine();
                         Console.WriteLine($"Šaljem sample #{counter}...");
 
-                        ServerMessage response = proxy.PushSample(sample);
-
-                        Console.WriteLine($"Odgovor za sample #{counter}: " + response);
+                        SessionResponse response = proxy.PushSample(sample);
+                        Console.WriteLine($"Odgovor za sample #{counter}: {response.Message}, Status: {response.Status}, Details: {response.Details}");
 
                         Thread.Sleep(100);
                     }
 
-                    ServerMessage endMessage = proxy.EndSession();
-                    Console.WriteLine("EndSession: " + endMessage);
+                    SessionResponse endResponse = proxy.EndSession();
+                    Console.WriteLine("EndSession: " + endResponse.Message + ", Status: " + endResponse.Status + ", Details: " + endResponse.Details);
 
                     ((IClientChannel)proxy).Close();
                     factory.Close();
