@@ -22,17 +22,27 @@ namespace Service
 
         public SessionService()
         {
-            statorWThreshold = double.Parse(ConfigurationManager.AppSettings["Stator_w_threshold"], CultureInfo.InvariantCulture);
-            statorTThreshold = double.Parse(ConfigurationManager.AppSettings["Stator_t_threshold"], CultureInfo.InvariantCulture);
-            pmThreshold = double.Parse(ConfigurationManager.AppSettings["PM_threshold"], CultureInfo.InvariantCulture);
+            if (!double.TryParse(ConfigurationManager.AppSettings["Stator_w_threshold"], NumberStyles.Float, CultureInfo.InvariantCulture, out statorWThreshold))
+            {
+                throw new FaultException<DataFormatFault>(new DataFormatFault("Stator_w_threshold nije validno podešen u konfiguraciji."));
+            }
+
+            if (!double.TryParse(ConfigurationManager.AppSettings["Stator_t_threshold"], NumberStyles.Float, CultureInfo.InvariantCulture, out statorTThreshold))
+            {
+                throw new FaultException<DataFormatFault>(new DataFormatFault("Stator_t_threshold nije validno podešen u konfiguraciji."));
+            }
+
+            if (!double.TryParse(ConfigurationManager.AppSettings["PM_threshold"], NumberStyles.Float, CultureInfo.InvariantCulture, out pmThreshold))
+            {
+                throw new FaultException<DataFormatFault>(new DataFormatFault("PM_threshold nije validno podešen u konfiguraciji."));
+            }
         }
 
-        public ServerMessage StartSession(Meta meta)
+        public SessionResponse StartSession(Meta meta)
         {
             if (!IsMetaValid(meta))
             {
-                throw new FaultException<DataFormatFault>(
-                    new DataFormatFault("Meta-zaglavlje nije validno. Sva polja su obavezna."));
+                throw new FaultException<DataFormatFault>(new DataFormatFault("Meta-zaglavlje nije validno. Sva polja su obavezna."));
             }
 
             acceptedSamples.Clear();
@@ -57,21 +67,20 @@ namespace Service
             Console.WriteLine("Kreirani fajlovi: measurements_session.csv i rejects.csv");
             Console.WriteLine("Sesija uspešno inicijalizovana.");
 
-            return ServerMessage.ACK;
+            return new SessionResponse(ServerMessage.ACK,SessionStatus.IN_PROGRESS,"Sesija uspesno inicijalizovana.");
         }
 
-        public ServerMessage PushSample(MotorSample sample)
+        public SessionResponse PushSample(MotorSample sample)
         {
             if (currentStatus != SessionStatus.IN_PROGRESS)
             {
-                Console.WriteLine("Greška: Pokušaj slanja uzorka pre pokretanja sesije.");
-                return ServerMessage.NACK;
+                throw new FaultException<SessionStateFault>(
+                    new SessionStateFault("Nije moguće poslati uzorak jer sesija nije u IN_PROGRESS stanju."));
             }
 
             if (sessionFileStorage == null)
             {
-                Console.WriteLine("Greška: Skladište fajlova nije inicijalizovano.");
-                return ServerMessage.NACK;
+                throw new FaultException<SessionStateFault>(new SessionStateFault("Skladište fajlova nije inicijalizovano. Prvo pokrenite sesiju."));
             }
 
             string rejectReason;
@@ -80,7 +89,7 @@ namespace Service
             {
                 sessionFileStorage.WriteRejectedSample(sample, rejectReason);
                 Console.WriteLine("Uzorak je odbačen: " + rejectReason);
-                return ServerMessage.NACK;
+                return new SessionResponse(ServerMessage.NACK,SessionStatus.IN_PROGRESS,rejectReason);
             }
 
             CheckThresholds(sample);
@@ -90,17 +99,16 @@ namespace Service
             acceptedSamples.Add(sample);
 
             Console.WriteLine("Uzorak uspešno prihvaćen i upisan u measurements_session.csv.");
-            return ServerMessage.ACK;
+            return new SessionResponse(ServerMessage.ACK,SessionStatus.IN_PROGRESS,"Uzorak uspešno prihvaćen.");
         }
 
-        public ServerMessage EndSession()
+        public SessionResponse EndSession()
         {
             try
             {
                 if (currentStatus != SessionStatus.IN_PROGRESS)
                 {
-                    Console.WriteLine("Greška: Sesija nije aktivna.");
-                    return ServerMessage.NACK;
+                    throw new FaultException<SessionStateFault>(new SessionStateFault("Nije moguće završiti sesiju jer aktivna sesija ne postoji."));
                 }
 
                 currentStatus = SessionStatus.COMPLETED;
@@ -108,7 +116,7 @@ namespace Service
                 Console.WriteLine("Status promenjen u: COMPLETED");
                 Console.WriteLine("Sesija uspešno zatvorena.\n");
 
-                return ServerMessage.ACK;
+                return new SessionResponse(ServerMessage.ACK,SessionStatus.COMPLETED, "Sesija uspesno zatvorena");
             }
             finally
             {

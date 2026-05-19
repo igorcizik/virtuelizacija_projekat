@@ -9,13 +9,16 @@ namespace Common
         [OperationContract]
         [FaultContract(typeof(DataFormatFault))]
         [FaultContract(typeof(ValidationFault))]
-        ServerMessage StartSession(Meta meta);
+        [FaultContract(typeof(SessionStateFault))]
+        SessionResponse StartSession(Meta meta);
 
         [OperationContract]
         [FaultContract(typeof(ValidationFault))]
-        ServerMessage PushSample(MotorSample sample);
+        [FaultContract(typeof(SessionStateFault))]
+        SessionResponse PushSample(MotorSample sample);
 
         [OperationContract]
-        ServerMessage EndSession();
+        [FaultContract(typeof(SessionStateFault))]
+        SessionResponse EndSession();
     }
 }
