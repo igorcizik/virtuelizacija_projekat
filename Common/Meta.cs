@@ -1,8 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Runtime.Serialization;
 
 namespace Common
@@ -10,31 +5,15 @@ namespace Common
     [DataContract]
     public class Meta
     {
-        [DataMember]
-        public bool Stator_Winding { get; set; }
-        
-        [DataMember]
-        public bool Stator_Tooth { get; set; }
-        
-        [DataMember]
-        public bool Stator_Yoke { get; set; }
+        [DataMember] public bool Stator_Winding { get; set; }
+        [DataMember] public bool Stator_Tooth { get; set; }
+        [DataMember] public bool Stator_Yoke { get; set; }
+        [DataMember] public bool PM { get; set; }
+        [DataMember] public bool Profile_ID { get; set; }
+        [DataMember] public bool Ambient { get; set; }
+        [DataMember] public bool Torque { get; set; }
 
-        [DataMember]    
-        public bool PM { get; set; }
-
-        [DataMember]
-        public bool Profile_ID { get; set; }
-
-        [DataMember]
-        public bool Ambient { get; set; }
-
-        [DataMember]
-        public bool Torque { get; set; }
-
-        public Meta()
-        {
-            
-        }
+        public Meta() { }
 
         public Meta(bool stator_Winding, bool stator_Tooth, bool stator_Yoke, bool pM, bool profile_ID, bool ambient, bool torque)
         {
@@ -48,4 +27,3 @@ namespace Common
         }
     }
 }
-

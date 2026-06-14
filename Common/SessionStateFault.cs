@@ -1,20 +1,13 @@
-﻿using System.Runtime.Serialization;
+using System.Runtime.Serialization;
 
 namespace Common
 {
     [DataContract]
     public class SessionStateFault
     {
-        [DataMember]
-        public string Message { get; set; }
+        [DataMember] public string Message { get; set; }
 
-        public SessionStateFault()
-        {
-        }
-
-        public SessionStateFault(string message)
-        {
-            Message = message;
-        }
+        public SessionStateFault() { }
+        public SessionStateFault(string message) { Message = message; }
     }
 }
