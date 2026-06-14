@@ -1,4 +1,4 @@
-using Client.Logs;
+﻿using Client.Logs;
 using Common;
 using System;
 using System.Collections.Generic;
@@ -78,15 +78,12 @@ namespace Client.Readers
             Dictionary<string, int> indexes = GetRequiredColumnIndexes(headerLine.Split(','));
             string line;
             int rowNumber = 1;
+            int readRows = 0;
 
-            while ((line = textReader.ReadLine()) != null)
+            while (readRows < MaxValidRows && (line = textReader.ReadLine()) != null)
             {
                 rowNumber++;
-                if (rowNumber - 1 > MaxValidRows)
-                {
-                    logWriter.WriteExcessRow(rowNumber, line);
-                    continue;
-                }
+                readRows++;
 
                 MotorSample sample;
                 string reason;
@@ -179,3 +176,4 @@ namespace Client.Readers
         }
     }
 }
+
