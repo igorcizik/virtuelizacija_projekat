@@ -1,4 +1,4 @@
-﻿using Common;
+using Common;
 using Common.Enums;
 using Service.Storage;
 using System;
@@ -12,94 +12,58 @@ namespace Service
 {
     public class SessionService : ISession
     {
-        
-        private static SessionStatus? currentStatus = null;
-        private double statorWThreshold;
-        private double statorTThreshold;
-        private double pmThreshold;
+        private static SessionStatus? currentStatus;
         private static SessionFileStorage sessionFileStorage;
         private static readonly List<MotorSample> acceptedSamples = new List<MotorSample>();
 
-        public SessionService()
-        {
-            if (!double.TryParse(ConfigurationManager.AppSettings["Stator_w_threshold"], NumberStyles.Float, CultureInfo.InvariantCulture, out statorWThreshold))
-            {
-                throw new FaultException<DataFormatFault>(new DataFormatFault("Stator_w_threshold nije validno podešen u konfiguraciji."));
-            }
-
-            if (!double.TryParse(ConfigurationManager.AppSettings["Stator_t_threshold"], NumberStyles.Float, CultureInfo.InvariantCulture, out statorTThreshold))
-            {
-                throw new FaultException<DataFormatFault>(new DataFormatFault("Stator_t_threshold nije validno podešen u konfiguraciji."));
-            }
-
-            if (!double.TryParse(ConfigurationManager.AppSettings["PM_threshold"], NumberStyles.Float, CultureInfo.InvariantCulture, out pmThreshold))
-            {
-                throw new FaultException<DataFormatFault>(new DataFormatFault("PM_threshold nije validno podešen u konfiguraciji."));
-            }
-        }
+        private readonly double statorWThreshold = ReadThreshold("Stator_w_threshold");
+        private readonly double statorTThreshold = ReadThreshold("Stator_t_threshold");
+        private readonly double pmThreshold = ReadThreshold("PM_threshold");
 
         public SessionResponse StartSession(Meta meta)
         {
             if (!IsMetaValid(meta))
             {
-                throw new FaultException<DataFormatFault>(new DataFormatFault("Meta-zaglavlje nije validno. Sva polja su obavezna."));
+                ThrowDataFormat("Meta-zaglavlje nije validno. Sva polja su obavezna.");
+            }
+
+            string storagePath = ConfigurationManager.AppSettings["Session_storage_path"];
+            if (string.IsNullOrWhiteSpace(storagePath))
+            {
+                ThrowDataFormat("Putanja za čuvanje fajlova sesije nije definisana u konfiguraciji.");
             }
 
             acceptedSamples.Clear();
             currentStatus = SessionStatus.IN_PROGRESS;
-
-            string storagePath = ConfigurationManager.AppSettings["Session_storage_path"];
-
-            if (string.IsNullOrWhiteSpace(storagePath))
-            {
-                throw new FaultException<DataFormatFault>(
-                    new DataFormatFault("Putanja za čuvanje fajlova sesije nije definisana u konfiguraciji."));
-            }
-
-            if (sessionFileStorage != null)
-            {
-                sessionFileStorage.Dispose();
-            }
-
+            sessionFileStorage?.Dispose();
             sessionFileStorage = new SessionFileStorage(storagePath);
 
             Console.WriteLine("\nStatus: IN_PROGRESS");
             Console.WriteLine("Kreirani fajlovi: measurements_session.csv i rejects.csv");
             Console.WriteLine("Sesija uspešno inicijalizovana.");
 
-            return new SessionResponse(ServerMessage.ACK,SessionStatus.IN_PROGRESS,"Sesija uspesno inicijalizovana.");
+            return Response(ServerMessage.ACK, SessionStatus.IN_PROGRESS, "Sesija uspesno inicijalizovana.");
         }
 
         public SessionResponse PushSample(MotorSample sample)
         {
-            if (currentStatus != SessionStatus.IN_PROGRESS)
-            {
-                throw new FaultException<SessionStateFault>(
-                    new SessionStateFault("Nije moguće poslati uzorak jer sesija nije u IN_PROGRESS stanju."));
-            }
-
-            if (sessionFileStorage == null)
-            {
-                throw new FaultException<SessionStateFault>(new SessionStateFault("Skladište fajlova nije inicijalizovano. Prvo pokrenite sesiju."));
-            }
+            EnsureSessionInProgress();
 
             string rejectReason;
-
             if (!TryValidateSample(sample, out rejectReason))
             {
                 sessionFileStorage.WriteRejectedSample(sample, rejectReason);
                 Console.WriteLine("Uzorak je odbačen: " + rejectReason);
-                return new SessionResponse(ServerMessage.NACK,SessionStatus.IN_PROGRESS,rejectReason);
+                return Response(ServerMessage.NACK, SessionStatus.IN_PROGRESS, rejectReason);
             }
 
             CheckThresholds(sample);
             CheckAverageDeviation(sample);
-
             sessionFileStorage.WriteAcceptedSample(sample);
             acceptedSamples.Add(sample);
 
             Console.WriteLine("Uzorak uspešno prihvaćen i upisan u measurements_session.csv.");
-            return new SessionResponse(ServerMessage.ACK,SessionStatus.IN_PROGRESS,"Uzorak uspešno prihvaćen.");
+            return Response(ServerMessage.ACK, SessionStatus.IN_PROGRESS, "Uzorak uspešno prihvaćen.");
         }
 
         public SessionResponse EndSession()
@@ -108,39 +72,59 @@ namespace Service
             {
                 if (currentStatus != SessionStatus.IN_PROGRESS)
                 {
-                    throw new FaultException<SessionStateFault>(new SessionStateFault("Nije moguće završiti sesiju jer aktivna sesija ne postoji."));
+                    ThrowSessionState("Nije moguće završiti sesiju jer aktivna sesija ne postoji.");
                 }
 
                 currentStatus = SessionStatus.COMPLETED;
-
                 Console.WriteLine("Status promenjen u: COMPLETED");
                 Console.WriteLine("Sesija uspešno zatvorena.\n");
 
-                return new SessionResponse(ServerMessage.ACK,SessionStatus.COMPLETED, "Sesija uspesno zatvorena");
+                return Response(ServerMessage.ACK, SessionStatus.COMPLETED, "Sesija uspesno zatvorena");
             }
             finally
             {
-                if (sessionFileStorage != null)
-                {
-                    sessionFileStorage.Dispose();
-                    sessionFileStorage = null;
-                }
+                sessionFileStorage?.Dispose();
+                sessionFileStorage = null;
             }
         }
 
-        private bool IsMetaValid(Meta meta)
+        private static double ReadThreshold(string key)
         {
-            return meta != null &&
-                   meta.Stator_Winding &&
-                   meta.Stator_Tooth &&
-                   meta.Stator_Yoke &&
-                   meta.PM &&
-                   meta.Profile_ID &&
-                   meta.Ambient &&
-                   meta.Torque;
+            double value;
+            if (double.TryParse(ConfigurationManager.AppSettings[key], NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            {
+                return value;
+            }
+
+            ThrowDataFormat(key + " nije validno podešen u konfiguraciji.");
+            return 0;
         }
 
-        private bool TryValidateSample(MotorSample sample, out string reason)
+        private static SessionResponse Response(ServerMessage message, SessionStatus status, string details)
+        {
+            return new SessionResponse(message, status, details);
+        }
+
+        private static bool IsMetaValid(Meta meta)
+        {
+            return meta != null && meta.Stator_Winding && meta.Stator_Tooth && meta.Stator_Yoke &&
+                   meta.PM && meta.Profile_ID && meta.Ambient && meta.Torque;
+        }
+
+        private static void EnsureSessionInProgress()
+        {
+            if (currentStatus != SessionStatus.IN_PROGRESS)
+            {
+                ThrowSessionState("Nije moguće poslati uzorak jer sesija nije u IN_PROGRESS stanju.");
+            }
+
+            if (sessionFileStorage == null)
+            {
+                ThrowSessionState("Skladište fajlova nije inicijalizovano. Prvo pokrenite sesiju.");
+            }
+        }
+
+        private static bool TryValidateSample(MotorSample sample, out string reason)
         {
             if (sample == null)
             {
@@ -148,104 +132,68 @@ namespace Service
                 return false;
             }
 
-            if (sample.PM <= 0)
+            foreach (var value in new[]
             {
-                reason = "PM mora biti veći od 0.";
-                return false;
+                Tuple.Create("PM", sample.PM),
+                Tuple.Create("Stator_Winding", sample.Stator_Winding),
+                Tuple.Create("Stator_Tooth", sample.Stator_Tooth),
+                Tuple.Create("Stator_Yoke", sample.Stator_Yoke),
+                Tuple.Create("Ambient", sample.Ambient),
+                Tuple.Create("Profile_ID", (double)sample.Profile_ID)
+            })
+            {
+                if (value.Item2 <= 0)
+                {
+                    reason = value.Item1 + " mora biti veći od 0.";
+                    return false;
+                }
             }
 
-            if (sample.Stator_Winding <= 0)
-            {
-                reason = "Stator_Winding mora biti veći od 0.";
-                return false;
-            }
-
-            if (sample.Stator_Tooth <= 0)
-            {
-                reason = "Stator_Tooth mora biti veći od 0.";
-                return false;
-            }
-
-            if (sample.Stator_Yoke <= 0)
-            {
-                reason = "Stator_Yoke mora biti veći od 0.";
-                return false;
-            }
-
-            if (sample.Ambient <= 0)
-            {
-                reason = "Ambient mora biti veći od 0.";
-                return false;
-            }
-
-            if (sample.Profile_ID <= 0)
-            {
-                reason = "Profile_ID mora biti veći od 0.";
-                return false;
-            }
-
-            reason = "";
+            reason = string.Empty;
             return true;
         }
 
         private void CheckThresholds(MotorSample sample)
         {
-            if (sample.Stator_Winding > statorWThreshold)
+            foreach (var value in new[]
             {
-                Console.WriteLine($"Stator_Winding prešao prag: {sample.Stator_Winding} > {statorWThreshold}");
-            }
-
-            if (sample.Stator_Tooth > statorTThreshold)
+                Tuple.Create("Stator_Winding", sample.Stator_Winding, statorWThreshold),
+                Tuple.Create("Stator_Tooth", sample.Stator_Tooth, statorTThreshold),
+                Tuple.Create("PM", sample.PM, pmThreshold)
+            }.Where(x => x.Item2 > x.Item3))
             {
-                Console.WriteLine($"Stator_Tooth prešao prag: {sample.Stator_Tooth} > {statorTThreshold}");
-            }
-
-            if (sample.PM > pmThreshold)
-            {
-                Console.WriteLine($"PM prešao prag: {sample.PM} > {pmThreshold}");
+                Console.WriteLine($"{value.Item1} prešao prag: {value.Item2} > {value.Item3}");
             }
         }
 
-
-
-        private void CheckAverageDeviation(MotorSample sample)
+        private static void CheckAverageDeviation(MotorSample sample)
         {
             if (acceptedSamples.Count == 0)
             {
                 return;
             }
 
-            double avgStatorWinding = acceptedSamples.Average(x => x.Stator_Winding);
-            double avgStatorTooth = acceptedSamples.Average(x => x.Stator_Tooth);
-            double avgPM = acceptedSamples.Average(x => x.PM);
+            CheckDeviation("Stator_Winding", sample.Stator_Winding, acceptedSamples.Average(x => x.Stator_Winding));
+            CheckDeviation("Stator_Tooth", sample.Stator_Tooth, acceptedSamples.Average(x => x.Stator_Tooth));
+            CheckDeviation("PM", sample.PM, acceptedSamples.Average(x => x.PM));
+        }
 
-            if (!IsWithin25Percent(sample.Stator_Winding, avgStatorWinding))
+        private static void CheckDeviation(string name, double value, double average)
+        {
+            if (average != 0 && (value < average * 0.75 || value > average * 1.25))
             {
-                Console.WriteLine($"Stator_Winding odstupa više od ±25% od proseka. Vrednost: {sample.Stator_Winding}, prosek: {avgStatorWinding}");
-            }
-
-            if (!IsWithin25Percent(sample.Stator_Tooth, avgStatorTooth))
-            {
-                Console.WriteLine($"Stator_Tooth odstupa više od ±25% od proseka. Vrednost: {sample.Stator_Tooth}, prosek: {avgStatorTooth}");
-            }
-
-            if (!IsWithin25Percent(sample.PM, avgPM))
-            {
-                Console.WriteLine($"PM odstupa više od ±25% od proseka. Vrednost: {sample.PM}, prosek: {avgPM}");
+                Console.WriteLine($"{name} odstupa više od ±25% od proseka. Vrednost: {value}, prosek: {average}");
             }
         }
 
-        private bool IsWithin25Percent(double value, double average)
+        private static void ThrowDataFormat(string message)
         {
-            if (average == 0)
-            {
-                return true;
-            }
+            throw new FaultException<DataFormatFault>(new DataFormatFault(message));
+        }
 
-            double lowerBound = average * 0.75;
-            double upperBound = average * 1.25;
-
-            return value >= lowerBound && value <= upperBound;
+        private static void ThrowSessionState(string message)
+        {
+            throw new FaultException<SessionStateFault>(new SessionStateFault(message));
         }
     }
 }

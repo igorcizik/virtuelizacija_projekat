@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace Client.Logs
@@ -6,13 +6,9 @@ namespace Client.Logs
     public class ClientCsvLogWriter : IDisposable
     {
         private StreamWriter streamWriter;
-        private bool disposed = false;
-        private readonly string path;
+        private bool disposed;
 
-        public string Path
-        {
-            get { return path; }
-        }
+        public string Path { get; }
 
         public ClientCsvLogWriter(string path)
         {
@@ -21,11 +17,9 @@ namespace Client.Logs
                 throw new ArgumentException("Putanja log fajla nije validna.");
             }
 
-            this.path = path;
-
+            Path = path;
             string directory = System.IO.Path.GetDirectoryName(path);
-
-            if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
+            if (!string.IsNullOrWhiteSpace(directory))
             {
                 Directory.CreateDirectory(directory);
             }
@@ -33,66 +27,39 @@ namespace Client.Logs
             streamWriter = new StreamWriter(path, false);
         }
 
-        ~ClientCsvLogWriter()
-        {
-            Dispose(false);
-        }
-
         public void Dispose()
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!disposed)
+            if (disposed)
             {
-                if (disposing)
-                {
-                    if (streamWriter != null)
-                    {
-                        streamWriter.Flush();
-                        streamWriter.Dispose();
-                        streamWriter = null;
-                        Console.WriteLine("CSV log writer je zatvoren.");
-                    }
-                }
-
-                disposed = true;
+                return;
             }
+
+            streamWriter?.Flush();
+            streamWriter?.Dispose();
+            streamWriter = null;
+            disposed = true;
+            Console.WriteLine("CSV log writer je zatvoren.");
         }
 
         public void WriteInvalidRow(int rowNumber, string line, string reason)
         {
-            ThrowIfDisposed();
-
-            streamWriter.WriteLine(
-                $"INVALID ROW | Row: {rowNumber} | Reason: {reason} | Data: {line}"
-            );
-
-            streamWriter.Flush();
+            Write($"INVALID ROW | Row: {rowNumber} | Reason: {reason} | Data: {line}");
         }
 
         public void WriteExcessRow(int rowNumber, string line)
         {
-            ThrowIfDisposed();
-
-            streamWriter.WriteLine(
-                $"EXCESS ROW | Row: {rowNumber} | Data: {line}"
-            );
-
-            streamWriter.Flush();
+            Write($"EXCESS ROW | Row: {rowNumber} | Data: {line}");
         }
 
         public void WriteInfo(string message)
         {
+            Write($"INFO | {DateTime.Now:yyyy-MM-dd HH:mm:ss} | {message}");
+        }
+
+        private void Write(string line)
+        {
             ThrowIfDisposed();
-
-            streamWriter.WriteLine(
-                $"INFO | {DateTime.Now:yyyy-MM-dd HH:mm:ss} | {message}"
-            );
-
+            streamWriter.WriteLine(line);
             streamWriter.Flush();
         }
 

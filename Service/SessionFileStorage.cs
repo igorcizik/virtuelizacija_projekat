@@ -1,4 +1,4 @@
-﻿using Common;
+using Common;
 using System;
 using System.Globalization;
 using System.IO;
@@ -7,28 +7,15 @@ namespace Service.Storage
 {
     public class SessionFileStorage : IDisposable
     {
+        private const string Header = "Stator_Winding;Stator_Tooth;Stator_Yoke;PM;Profile_ID;Ambient;Torque;Status;Reason";
+
         private StreamWriter measurementsWriter;
         private StreamWriter rejectsWriter;
-        private bool disposed = false;
+        private bool disposed;
 
-        private readonly string sessionDirectoryPath;
-        private readonly string measurementsFilePath;
-        private readonly string rejectsFilePath;
-
-        public string SessionDirectoryPath
-        {
-            get { return sessionDirectoryPath; }
-        }
-
-        public string MeasurementsFilePath
-        {
-            get { return measurementsFilePath; }
-        }
-
-        public string RejectsFilePath
-        {
-            get { return rejectsFilePath; }
-        }
+        public string SessionDirectoryPath { get; }
+        public string MeasurementsFilePath { get; }
+        public string RejectsFilePath { get; }
 
         public SessionFileStorage(string baseDirectoryPath)
         {
@@ -37,102 +24,77 @@ namespace Service.Storage
                 throw new ArgumentException("Putanja za čuvanje sesije nije validna.");
             }
 
-            sessionDirectoryPath = baseDirectoryPath;
+            SessionDirectoryPath = baseDirectoryPath;
+            Directory.CreateDirectory(SessionDirectoryPath);
 
-            if (!Directory.Exists(sessionDirectoryPath))
-            {
-                Directory.CreateDirectory(sessionDirectoryPath);
-            }
+            MeasurementsFilePath = Path.Combine(SessionDirectoryPath, "measurements_session.csv");
+            RejectsFilePath = Path.Combine(SessionDirectoryPath, "rejects.csv");
 
-            measurementsFilePath = Path.Combine(sessionDirectoryPath, "measurements_session.csv");
-            rejectsFilePath = Path.Combine(sessionDirectoryPath, "rejects.csv");
-
-            measurementsWriter = new StreamWriter(measurementsFilePath, false);
-            rejectsWriter = new StreamWriter(rejectsFilePath, false);
-
-            WriteHeader(measurementsWriter);
-            WriteHeader(rejectsWriter);
-
-            measurementsWriter.Flush();
-            rejectsWriter.Flush();
-        }
-
-        ~SessionFileStorage()
-        {
-            Dispose(false);
+            measurementsWriter = CreateWriter(MeasurementsFilePath);
+            rejectsWriter = CreateWriter(RejectsFilePath);
         }
 
         public void Dispose()
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!disposed)
+            if (disposed)
             {
-                if (disposing)
-                {
-                    if (measurementsWriter != null)
-                    {
-                        measurementsWriter.Dispose();
-                        measurementsWriter = null;
-                        Console.WriteLine("measurements_session.csv writer je zatvoren.");
-                    }
-
-                    if (rejectsWriter != null)
-                    {
-                        rejectsWriter.Dispose();
-                        rejectsWriter = null;
-                        Console.WriteLine("rejects.csv writer je zatvoren.");
-                    }
-                }
-
-                disposed = true;
+                return;
             }
+
+            CloseWriter(ref measurementsWriter, "measurements_session.csv writer je zatvoren.");
+            CloseWriter(ref rejectsWriter, "rejects.csv writer je zatvoren.");
+            disposed = true;
+            GC.SuppressFinalize(this);
         }
 
         public void WriteAcceptedSample(MotorSample sample)
         {
-            ThrowIfDisposed();
-            WriteSample(measurementsWriter, sample, "ACCEPTED", "");
-            measurementsWriter.Flush();
+            WriteSample(measurementsWriter, sample, "ACCEPTED", string.Empty);
         }
 
         public void WriteRejectedSample(MotorSample sample, string reason)
         {
-            ThrowIfDisposed();
             WriteSample(rejectsWriter, sample, "REJECTED", reason);
-            rejectsWriter.Flush();
         }
 
-        private void WriteHeader(StreamWriter writer)
+        private static StreamWriter CreateWriter(string path)
         {
-            writer.WriteLine("Stator_Winding;Stator_Tooth;Stator_Yoke;PM;Profile_ID;Ambient;Torque;Status;Reason");
+            var writer = new StreamWriter(path, false);
+            writer.WriteLine(Header);
+            writer.Flush();
+            return writer;
+        }
+
+        private static void CloseWriter(ref StreamWriter writer, string message)
+        {
+            if (writer == null)
+            {
+                return;
+            }
+
+            writer.Dispose();
+            writer = null;
+            Console.WriteLine(message);
         }
 
         private void WriteSample(StreamWriter writer, MotorSample sample, string status, string reason)
         {
-            if (sample == null)
-            {
-                writer.WriteLine($";;;;;;;{status};{reason}");
-                return;
-            }
+            ThrowIfDisposed();
 
-            string line = string.Join(";",
-                sample.Stator_Winding.ToString(CultureInfo.InvariantCulture),
-                sample.Stator_Tooth.ToString(CultureInfo.InvariantCulture),
-                sample.Stator_Yoke.ToString(CultureInfo.InvariantCulture),
-                sample.PM.ToString(CultureInfo.InvariantCulture),
-                sample.Profile_ID.ToString(CultureInfo.InvariantCulture),
-                sample.Ambient.ToString(CultureInfo.InvariantCulture),
-                sample.Torque.ToString(CultureInfo.InvariantCulture),
-                status,
-                reason
-            );
+            writer.WriteLine(sample == null
+                ? $";;;;;;;{status};{reason}"
+                : string.Join(";",
+                    sample.Stator_Winding.ToString(CultureInfo.InvariantCulture),
+                    sample.Stator_Tooth.ToString(CultureInfo.InvariantCulture),
+                    sample.Stator_Yoke.ToString(CultureInfo.InvariantCulture),
+                    sample.PM.ToString(CultureInfo.InvariantCulture),
+                    sample.Profile_ID.ToString(CultureInfo.InvariantCulture),
+                    sample.Ambient.ToString(CultureInfo.InvariantCulture),
+                    sample.Torque.ToString(CultureInfo.InvariantCulture),
+                    status,
+                    reason));
 
-            writer.WriteLine(line);
+            writer.Flush();
         }
 
         private void ThrowIfDisposed()

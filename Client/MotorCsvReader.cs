@@ -1,4 +1,4 @@
-﻿using Client.Logs;
+using Client.Logs;
 using Common;
 using System;
 using System.Collections.Generic;
@@ -10,18 +10,18 @@ namespace Client.Readers
 {
     public class MotorCsvReader : IDisposable
     {
+        private static readonly string[] RequiredColumns =
+        {
+            "stator_winding", "stator_tooth", "stator_yoke", "pm", "profile_id", "ambient", "torque"
+        };
+
         private TextReader textReader;
         private ClientCsvLogWriter logWriter;
-        private bool disposed = false;
+        private bool disposed;
 
-        private readonly string csvPath;
-        private readonly string logPath;
-        private readonly int maxValidRows;
-
-        public string CsvPath
-        {
-            get { return csvPath; }
-        }
+        public string CsvPath { get; }
+        private string LogPath { get; }
+        private int MaxValidRows { get; }
 
         public MotorCsvReader(string csvPath, string logPath, int maxValidRows)
         {
@@ -40,78 +40,49 @@ namespace Client.Readers
                 throw new ArgumentException("Broj redova za učitavanje mora biti veći od 0.");
             }
 
-            this.csvPath = csvPath;
-            this.logPath = logPath;
-            this.maxValidRows = maxValidRows;
-        }
-
-        ~MotorCsvReader()
-        {
-            Dispose(false);
+            CsvPath = csvPath;
+            LogPath = logPath;
+            MaxValidRows = maxValidRows;
         }
 
         public void Dispose()
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!disposed)
+            if (disposed)
             {
-                if (disposing)
-                {
-                    if (textReader != null)
-                    {
-                        textReader.Dispose();
-                        textReader = null;
-                        Console.WriteLine("CSV reader je zatvoren.");
-                    }
-
-                    if (logWriter != null)
-                    {
-                        logWriter.Dispose();
-                        logWriter = null;
-                    }
-                }
-
-                disposed = true;
+                return;
             }
+
+            textReader?.Dispose();
+            logWriter?.Dispose();
+            textReader = null;
+            logWriter = null;
+            disposed = true;
+            Console.WriteLine("CSV reader je zatvoren.");
         }
 
         public List<MotorSample> ReadFirstParsableSamples()
         {
             ThrowIfDisposed();
 
-            List<MotorSample> samples = new List<MotorSample>(maxValidRows);
-
-            textReader = File.OpenText(csvPath);
-            logWriter = new ClientCsvLogWriter(logPath);
-
+            var samples = new List<MotorSample>(MaxValidRows);
+            textReader = File.OpenText(CsvPath);
+            logWriter = new ClientCsvLogWriter(LogPath);
             logWriter.WriteInfo("Početak učitavanja CSV fajla.");
 
             string headerLine = textReader.ReadLine();
-
             if (string.IsNullOrWhiteSpace(headerLine))
             {
                 throw new InvalidDataException("CSV fajl nema zaglavlje.");
             }
 
-            string[] headers = headerLine.Split(',');
-
-            Dictionary<string, int> indexes = GetRequiredColumnIndexes(headers);
-
+            Dictionary<string, int> indexes = GetRequiredColumnIndexes(headerLine.Split(','));
             string line;
             int rowNumber = 1;
-            int processedDataRows = 0;
 
             while ((line = textReader.ReadLine()) != null)
             {
                 rowNumber++;
-                processedDataRows++;
-
-                if (processedDataRows > maxValidRows)
+                if (rowNumber - 1 > MaxValidRows)
                 {
                     logWriter.WriteExcessRow(rowNumber, line);
                     continue;
@@ -119,7 +90,6 @@ namespace Client.Readers
 
                 MotorSample sample;
                 string reason;
-
                 if (TryParseSample(line, indexes, out sample, out reason))
                 {
                     samples.Add(sample);
@@ -131,41 +101,29 @@ namespace Client.Readers
             }
 
             logWriter.WriteInfo($"Završeno učitavanje. Učitano validnih redova: {samples.Count}.");
-
             return samples;
         }
 
-        private Dictionary<string, int> GetRequiredColumnIndexes(string[] headers)
+        private static Dictionary<string, int> GetRequiredColumnIndexes(string[] headers)
         {
-            Dictionary<string, int> indexes = new Dictionary<string, int>();
-
-            AddColumnIndex(headers, indexes, "stator_winding");
-            AddColumnIndex(headers, indexes, "stator_tooth");
-            AddColumnIndex(headers, indexes, "stator_yoke");
-            AddColumnIndex(headers, indexes, "pm");
-            AddColumnIndex(headers, indexes, "profile_id");
-            AddColumnIndex(headers, indexes, "ambient");
-            AddColumnIndex(headers, indexes, "torque");
-
-            return indexes;
+            return RequiredColumns.ToDictionary(column => column, column => FindColumn(headers, column));
         }
 
-        private void AddColumnIndex(string[] headers, Dictionary<string, int> indexes, string columnName)
+        private static int FindColumn(string[] headers, string columnName)
         {
             int index = Array.FindIndex(headers, h => h.Trim().Equals(columnName, StringComparison.OrdinalIgnoreCase));
-
             if (index == -1)
             {
                 throw new InvalidDataException($"CSV fajl ne sadrži obaveznu kolonu: {columnName}");
             }
 
-            indexes[columnName] = index;
+            return index;
         }
 
-        private bool TryParseSample(string line, Dictionary<string, int> indexes, out MotorSample sample, out string reason)
+        private static bool TryParseSample(string line, Dictionary<string, int> indexes, out MotorSample sample, out string reason)
         {
             sample = null;
-            reason = "";
+            reason = string.Empty;
 
             if (string.IsNullOrWhiteSpace(line))
             {
@@ -174,96 +132,42 @@ namespace Client.Readers
             }
 
             string[] parts = line.Split(',');
-
-            int maxRequiredIndex = indexes.Values.Max();
-
-            if (parts.Length <= maxRequiredIndex)
+            if (parts.Length <= indexes.Values.Max())
             {
                 reason = "Red nema dovoljan broj kolona.";
                 return false;
             }
 
-            double statorWinding;
-            double statorTooth;
-            double statorYoke;
-            double pm;
-            double ambient;
-            double torque;
+            double statorWinding, statorTooth, statorYoke, pm, ambient, torque;
             int profileId;
 
-            if (!TryParseDouble(parts[indexes["stator_winding"]], out statorWinding))
+            if (!TryParseDouble(parts, indexes, "stator_winding", out statorWinding, out reason) ||
+                !TryParseDouble(parts, indexes, "stator_tooth", out statorTooth, out reason) ||
+                !TryParseDouble(parts, indexes, "stator_yoke", out statorYoke, out reason) ||
+                !TryParseDouble(parts, indexes, "pm", out pm, out reason) ||
+                !TryParseInt(parts, indexes, "profile_id", out profileId, out reason) ||
+                !TryParseDouble(parts, indexes, "ambient", out ambient, out reason) ||
+                !TryParseDouble(parts, indexes, "torque", out torque, out reason))
             {
-                reason = "Nevalidna vrednost za stator_winding.";
                 return false;
             }
 
-            if (!TryParseDouble(parts[indexes["stator_tooth"]], out statorTooth))
-            {
-                reason = "Nevalidna vrednost za stator_tooth.";
-                return false;
-            }
-
-            if (!TryParseDouble(parts[indexes["stator_yoke"]], out statorYoke))
-            {
-                reason = "Nevalidna vrednost za stator_yoke.";
-                return false;
-            }
-
-            if (!TryParseDouble(parts[indexes["pm"]], out pm))
-            {
-                reason = "Nevalidna vrednost za pm.";
-                return false;
-            }
-
-            if (!TryParseInt(parts[indexes["profile_id"]], out profileId))
-            {
-                reason = "Nevalidna vrednost za profile_id.";
-                return false;
-            }
-
-            if (!TryParseDouble(parts[indexes["ambient"]], out ambient))
-            {
-                reason = "Nevalidna vrednost za ambient.";
-                return false;
-            }
-
-            if (!TryParseDouble(parts[indexes["torque"]], out torque))
-            {
-                reason = "Nevalidna vrednost za torque.";
-                return false;
-            }
-
-            sample = new MotorSample(
-                statorWinding,
-                statorTooth,
-                statorYoke,
-                pm,
-                profileId,
-                ambient,
-                torque
-            );
-
+            sample = new MotorSample(statorWinding, statorTooth, statorYoke, pm, profileId, ambient, torque);
             return true;
         }
 
-        private bool TryParseDouble(string value, out double result)
+        private static bool TryParseDouble(string[] parts, Dictionary<string, int> indexes, string column, out double result, out string reason)
         {
-            return double.TryParse(
-                value.Trim(),
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out result
-            );
+            bool parsed = double.TryParse(parts[indexes[column]].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out result);
+            reason = parsed ? string.Empty : "Nevalidna vrednost za " + column + ".";
+            return parsed;
         }
 
-        private bool TryParseInt(string value, out int result)
+        private static bool TryParseInt(string[] parts, Dictionary<string, int> indexes, string column, out int result, out string reason)
         {
-            return int.TryParse(
-                value.Trim(),
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture,
-                out result
-            );
+            bool parsed = int.TryParse(parts[indexes[column]].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
+            reason = parsed ? string.Empty : "Nevalidna vrednost za " + column + ".";
+            return parsed;
         }
 
         private void ThrowIfDisposed()
