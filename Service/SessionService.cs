@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Enums;
 using Service.Storage;
 using System;
@@ -12,58 +12,91 @@ namespace Service
 {
     public class SessionService : ISession
     {
+        public delegate void TransferStartedHandler(string message);
+        public delegate void SampleReceivedHandler(MotorSample sample, int sampleNumber);
+        public delegate void TransferCompletedHandler(string message);
+        public delegate void WarningRaisedHandler(string message);
+
+        public event TransferStartedHandler OnTransferStarted;
+        public event SampleReceivedHandler OnSampleReceived;
+        public event TransferCompletedHandler OnTransferCompleted;
+        public event WarningRaisedHandler OnWarningRaised;
+        public event WarningRaisedHandler PMSpike;
+        public event WarningRaisedHandler StatorSpikeW;
+        public event WarningRaisedHandler StatorSpikeT;
+        public event WarningRaisedHandler OutOfBandWarning;
+
         private static SessionStatus? currentStatus;
         private static SessionFileStorage sessionFileStorage;
         private static readonly List<MotorSample> acceptedSamples = new List<MotorSample>();
+        private static MotorSample previousAcceptedSample;
+        private static int receivedSamples;
 
         private readonly double statorWThreshold = ReadThreshold("Stator_w_threshold");
         private readonly double statorTThreshold = ReadThreshold("Stator_t_threshold");
         private readonly double pmThreshold = ReadThreshold("PM_threshold");
 
+        public SessionService()
+        {
+            OnTransferStarted += Console.WriteLine;
+            OnSampleReceived += (sample, sampleNumber) => Console.WriteLine($"Transfer in progress... received sample #{sampleNumber}");
+            OnTransferCompleted += Console.WriteLine;
+            OnWarningRaised += message => Console.WriteLine("Warning: " + message);
+            PMSpike += message => OnWarningRaised?.Invoke("PMSpike: " + message);
+            StatorSpikeW += message => OnWarningRaised?.Invoke("StatorSpikeW: " + message);
+            StatorSpikeT += message => OnWarningRaised?.Invoke("StatorSpikeT: " + message);
+            OutOfBandWarning += message => OnWarningRaised?.Invoke("OutOfBandWarning: " + message);
+        }
+
         public SessionResponse StartSession(Meta meta)
         {
             if (!IsMetaValid(meta))
             {
-                ThrowDataFormat("Meta-zaglavlje nije validno. Sva polja su obavezna.");
+                ThrowDataFormat("Meta header is not valid. All fields are required.");
             }
 
             string storagePath = ConfigurationManager.AppSettings["Session_storage_path"];
             if (string.IsNullOrWhiteSpace(storagePath))
             {
-                ThrowDataFormat("Putanja za čuvanje fajlova sesije nije definisana u konfiguraciji.");
+                ThrowDataFormat("Session storage path is not defined in configuration.");
             }
 
             acceptedSamples.Clear();
+            previousAcceptedSample = null;
+            receivedSamples = 0;
             currentStatus = SessionStatus.IN_PROGRESS;
             sessionFileStorage?.Dispose();
             sessionFileStorage = new SessionFileStorage(storagePath);
 
-            Console.WriteLine("\nStatus: IN_PROGRESS");
-            Console.WriteLine("Kreirani fajlovi: measurements_session.csv i rejects.csv");
-            Console.WriteLine("Sesija uspešno inicijalizovana.");
+            OnTransferStarted?.Invoke("Transfer started. Status: IN_PROGRESS");
+            Console.WriteLine("Created files: measurements_session.csv and rejects.csv");
+            Console.WriteLine("Session initialized successfully.");
 
-            return Response(ServerMessage.ACK, SessionStatus.IN_PROGRESS, "Sesija uspesno inicijalizovana.");
+            return Response(ServerMessage.ACK, SessionStatus.IN_PROGRESS, "Session initialized successfully.");
         }
 
         public SessionResponse PushSample(MotorSample sample)
         {
             EnsureSessionInProgress();
+            OnSampleReceived?.Invoke(sample, ++receivedSamples);
 
             string rejectReason;
             if (!TryValidateSample(sample, out rejectReason))
             {
                 sessionFileStorage.WriteRejectedSample(sample, rejectReason);
-                Console.WriteLine("Uzorak je odbačen: " + rejectReason);
+                Console.WriteLine("Sample rejected: " + rejectReason);
                 return Response(ServerMessage.NACK, SessionStatus.IN_PROGRESS, rejectReason);
             }
 
             CheckThresholds(sample);
-            CheckAverageDeviation(sample);
+            CheckSuddenChanges(sample);
+            CheckRunningPmMean(sample);
             sessionFileStorage.WriteAcceptedSample(sample);
             acceptedSamples.Add(sample);
+            previousAcceptedSample = sample;
 
-            Console.WriteLine("Uzorak uspešno prihvaćen i upisan u measurements_session.csv.");
-            return Response(ServerMessage.ACK, SessionStatus.IN_PROGRESS, "Uzorak uspešno prihvaćen.");
+            Console.WriteLine("Sample accepted and written to measurements_session.csv.");
+            return Response(ServerMessage.ACK, SessionStatus.IN_PROGRESS, "Sample accepted.");
         }
 
         public SessionResponse EndSession()
@@ -72,14 +105,15 @@ namespace Service
             {
                 if (currentStatus != SessionStatus.IN_PROGRESS)
                 {
-                    ThrowSessionState("Nije moguće završiti sesiju jer aktivna sesija ne postoji.");
+                    ThrowSessionState("Session cannot be completed because there is no active session.");
                 }
 
                 currentStatus = SessionStatus.COMPLETED;
-                Console.WriteLine("Status promenjen u: COMPLETED");
-                Console.WriteLine("Sesija uspešno zatvorena.\n");
+                OnTransferCompleted?.Invoke("Transfer completed.");
+                Console.WriteLine("Status changed to: COMPLETED");
+                Console.WriteLine("Session closed successfully.\n");
 
-                return Response(ServerMessage.ACK, SessionStatus.COMPLETED, "Sesija uspesno zatvorena");
+                return Response(ServerMessage.ACK, SessionStatus.COMPLETED, "Transfer completed. Session closed successfully.");
             }
             finally
             {
@@ -96,7 +130,7 @@ namespace Service
                 return value;
             }
 
-            ThrowDataFormat(key + " nije validno podešen u konfiguraciji.");
+            ThrowDataFormat(key + " is not valid in configuration.");
             return 0;
         }
 
@@ -115,12 +149,12 @@ namespace Service
         {
             if (currentStatus != SessionStatus.IN_PROGRESS)
             {
-                ThrowSessionState("Nije moguće poslati uzorak jer sesija nije u IN_PROGRESS stanju.");
+                ThrowSessionState("Cannot send sample because the session is not IN_PROGRESS.");
             }
 
             if (sessionFileStorage == null)
             {
-                ThrowSessionState("Skladište fajlova nije inicijalizovano. Prvo pokrenite sesiju.");
+                ThrowSessionState("File storage is not initialized. Start session first.");
             }
         }
 
@@ -128,7 +162,7 @@ namespace Service
         {
             if (sample == null)
             {
-                reason = "Uzorak je null.";
+                reason = "Sample is null.";
                 return false;
             }
 
@@ -144,7 +178,7 @@ namespace Service
             {
                 if (value.Item2 <= 0)
                 {
-                    reason = value.Item1 + " mora biti veći od 0.";
+                    reason = value.Item1 + " must be greater than 0.";
                     return false;
                 }
             }
@@ -162,27 +196,52 @@ namespace Service
                 Tuple.Create("PM", sample.PM, pmThreshold)
             }.Where(x => x.Item2 > x.Item3))
             {
-                Console.WriteLine($"{value.Item1} prešao prag: {value.Item2} > {value.Item3}");
+                OnWarningRaised?.Invoke($"{value.Item1} exceeded configured threshold: {value.Item2} > {value.Item3}");
             }
         }
 
-        private static void CheckAverageDeviation(MotorSample sample)
+        private void CheckSuddenChanges(MotorSample sample)
         {
-            if (acceptedSamples.Count == 0)
+            if (previousAcceptedSample == null)
             {
                 return;
             }
 
-            CheckDeviation("Stator_Winding", sample.Stator_Winding, acceptedSamples.Average(x => x.Stator_Winding));
-            CheckDeviation("Stator_Tooth", sample.Stator_Tooth, acceptedSamples.Average(x => x.Stator_Tooth));
-            CheckDeviation("PM", sample.PM, acceptedSamples.Average(x => x.PM));
+            double deltaPm = sample.PM - previousAcceptedSample.PM;
+            double deltaStatorWinding = sample.Stator_Winding - previousAcceptedSample.Stator_Winding;
+            double deltaStatorTooth = sample.Stator_Tooth - previousAcceptedSample.Stator_Tooth;
+
+            if (Math.Abs(deltaPm) > pmThreshold)
+            {
+                PMSpike?.Invoke($"delta PM={deltaPm.ToString(CultureInfo.InvariantCulture)}, threshold={pmThreshold.ToString(CultureInfo.InvariantCulture)}");
+            }
+
+            if (deltaStatorWinding > statorWThreshold)
+            {
+                StatorSpikeW?.Invoke($"delta Stator_Winding={deltaStatorWinding.ToString(CultureInfo.InvariantCulture)}, threshold={statorWThreshold.ToString(CultureInfo.InvariantCulture)}");
+            }
+
+            if (deltaStatorTooth > statorTThreshold)
+            {
+                StatorSpikeT?.Invoke($"delta Stator_Tooth={deltaStatorTooth.ToString(CultureInfo.InvariantCulture)}, threshold={statorTThreshold.ToString(CultureInfo.InvariantCulture)}");
+            }
         }
 
-        private static void CheckDeviation(string name, double value, double average)
+        private void CheckRunningPmMean(MotorSample sample)
         {
-            if (average != 0 && (value < average * 0.75 || value > average * 1.25))
+            double pmMean = (acceptedSamples.Sum(x => x.PM) + sample.PM) / (acceptedSamples.Count + 1);
+            if (pmMean == 0)
             {
-                Console.WriteLine($"{name} odstupa više od ±25% od proseka. Vrednost: {value}, prosek: {average}");
+                return;
+            }
+
+            if (sample.PM < pmMean * 0.75)
+            {
+                OutOfBandWarning?.Invoke($"PM is below expected value: PM={sample.PM.ToString(CultureInfo.InvariantCulture)}, T_mean={pmMean.ToString(CultureInfo.InvariantCulture)}");
+            }
+            else if (sample.PM > pmMean * 1.25)
+            {
+                OutOfBandWarning?.Invoke($"PM is above expected value: PM={sample.PM.ToString(CultureInfo.InvariantCulture)}, T_mean={pmMean.ToString(CultureInfo.InvariantCulture)}");
             }
         }
 

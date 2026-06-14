@@ -1,7 +1,8 @@
-using Common;
+﻿using Common;
 using System;
 using System.Globalization;
 using System.IO;
+using System.Text;
 
 namespace Service.Storage
 {
@@ -9,6 +10,8 @@ namespace Service.Storage
     {
         private const string Header = "Stator_Winding;Stator_Tooth;Stator_Yoke;PM;Profile_ID;Ambient;Torque;Status;Reason";
 
+        private FileStream measurementsStream;
+        private FileStream rejectsStream;
         private StreamWriter measurementsWriter;
         private StreamWriter rejectsWriter;
         private bool disposed;
@@ -30,8 +33,8 @@ namespace Service.Storage
             MeasurementsFilePath = Path.Combine(SessionDirectoryPath, "measurements_session.csv");
             RejectsFilePath = Path.Combine(SessionDirectoryPath, "rejects.csv");
 
-            measurementsWriter = CreateWriter(MeasurementsFilePath);
-            rejectsWriter = CreateWriter(RejectsFilePath);
+            measurementsWriter = CreateWriter(MeasurementsFilePath, out measurementsStream);
+            rejectsWriter = CreateWriter(RejectsFilePath, out rejectsStream);
         }
 
         public void Dispose()
@@ -41,8 +44,8 @@ namespace Service.Storage
                 return;
             }
 
-            CloseWriter(ref measurementsWriter, "measurements_session.csv writer je zatvoren.");
-            CloseWriter(ref rejectsWriter, "rejects.csv writer je zatvoren.");
+            CloseWriter(ref measurementsWriter, ref measurementsStream, "measurements_session.csv writer je zatvoren.");
+            CloseWriter(ref rejectsWriter, ref rejectsStream, "rejects.csv writer je zatvoren.");
             disposed = true;
             GC.SuppressFinalize(this);
         }
@@ -57,23 +60,26 @@ namespace Service.Storage
             WriteSample(rejectsWriter, sample, "REJECTED", reason);
         }
 
-        private static StreamWriter CreateWriter(string path)
+        private static StreamWriter CreateWriter(string path, out FileStream stream)
         {
-            var writer = new StreamWriter(path, false);
+            stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+            var writer = new StreamWriter(stream, Encoding.UTF8);
             writer.WriteLine(Header);
             writer.Flush();
             return writer;
         }
 
-        private static void CloseWriter(ref StreamWriter writer, string message)
+        private static void CloseWriter(ref StreamWriter writer, ref FileStream stream, string message)
         {
             if (writer == null)
             {
                 return;
             }
 
+            writer.Flush();
             writer.Dispose();
             writer = null;
+            stream = null;
             Console.WriteLine(message);
         }
 
