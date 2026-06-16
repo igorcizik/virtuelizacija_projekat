@@ -16,12 +16,14 @@ namespace Client
             ChannelFactory<ISession> factory = null;
             ISession proxy = null;
 
+            string csvPath = ConfigurationManager.AppSettings["Csv_path"];
+            string csvLogPath = ConfigurationManager.AppSettings["Csv_log_path"];
+            int maxRows = int.Parse(ConfigurationManager.AppSettings["Max_rows"]);
+
+
             try
             {
-                string csvPath = ConfigurationManager.AppSettings["Csv_path"];
-                string csvLogPath = ConfigurationManager.AppSettings["Csv_log_path"];
-                int maxRows = int.Parse(ConfigurationManager.AppSettings["Max_rows"]);
-
+               
                 List<MotorSample> samples;
                 Console.WriteLine("Client spreman za slanje podataka");
                 using (MotorCsvReader reader = new MotorCsvReader(csvPath, csvLogPath, maxRows))
@@ -81,6 +83,61 @@ namespace Client
             }
 
             Console.ReadLine();
+
+            /**SIMULACIJA PREKIDA
+             * Console.WriteLine("\n--- TEST: Dispose pattern pri prekidu veze ---");
+            Console.WriteLine("Pokretanje testa...");
+
+            MotorCsvReader testReader = null;
+            ChannelFactory<ISession> testFactory = null;
+            ISession testProxy = null;
+
+            try
+            {
+                testReader = new MotorCsvReader(csvPath, csvLogPath, maxRows);
+                var testSamples = testReader.ReadFirstParsableSamples();
+
+                testFactory = new ChannelFactory<ISession>("SessionService");
+                testProxy = testFactory.CreateChannel();
+
+                testProxy.StartSession(new Meta(true, true, true, true, true, true, true));
+
+                int i = 0;
+                foreach (MotorSample sample in testSamples)
+                {
+                    i++;
+                    testProxy.PushSample(sample);
+                    Console.WriteLine($"Test sample #{i} poslan.");
+
+                    if (i == 5)
+                    {
+                        throw new CommunicationException("Simulirani prekid veze na sample #5.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Uhvaćen izuzetak: {ex.Message}");
+                Console.WriteLine("Pozivam Dispose...");
+
+                if (testProxy != null)
+                {
+                    ((IClientChannel)testProxy).Abort();
+                }
+
+                if (testFactory != null)
+                {
+                    testFactory.Abort();
+                }
+            }
+            finally
+            {
+                testReader?.Dispose();
+                Console.WriteLine("Test završen.");
+            }
+
+            Console.ReadLine();**/
         }
     }
 }
+

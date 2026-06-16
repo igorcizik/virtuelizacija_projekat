@@ -35,6 +35,7 @@ namespace Service
         private readonly double statorWThreshold = ReadThreshold("Stator_w_threshold");
         private readonly double statorTThreshold = ReadThreshold("Stator_t_threshold");
         private readonly double pmThreshold = ReadThreshold("PM_threshold");
+        private readonly double pmDeviationPercent = ReadThreshold("PM_deviation_percent");
 
         public SessionService()
         {
@@ -166,21 +167,34 @@ namespace Service
                 return false;
             }
 
-            foreach (var value in new[]
+            var rangeChecks = new[]
             {
-                Tuple.Create("PM", sample.PM),
-                Tuple.Create("Stator_Winding", sample.Stator_Winding),
-                Tuple.Create("Stator_Tooth", sample.Stator_Tooth),
-                Tuple.Create("Stator_Yoke", sample.Stator_Yoke),
-                Tuple.Create("Ambient", sample.Ambient),
-                Tuple.Create("Profile_ID", (double)sample.Profile_ID)
-            })
+                Tuple.Create("PM", sample.PM, 0.0, 29.0),
+                Tuple.Create("Stator_Winding", sample.Stator_Winding, 0.0, 30.0),
+                Tuple.Create("Stator_Tooth", sample.Stator_Tooth, 0.0, 25.0),
+                Tuple.Create("Stator_Yoke", sample.Stator_Yoke, 0.0, 140.0),
+                Tuple.Create("Ambient", sample.Ambient, -40.0, 60.0)
+            };
+
+            foreach (var check in rangeChecks)
             {
-                if (value.Item2 <= 0)
+                if (check.Item2 <= check.Item3 || check.Item2 > check.Item4)
                 {
-                    reason = value.Item1 + " must be greater than 0.";
+                    reason = $"{check.Item1} value {check.Item2.ToString(CultureInfo.InvariantCulture)} is out of allowed range ({check.Item3.ToString(CultureInfo.InvariantCulture)}, {check.Item4.ToString(CultureInfo.InvariantCulture)}].";
                     return false;
                 }
+            }
+
+            if (sample.Torque > 48.5)
+            {
+                reason = $"Torque value {sample.Torque.ToString(CultureInfo.InvariantCulture)} exceeds allowed maximum (45).";
+                return false;
+            }
+
+            if (sample.Profile_ID <= 0)
+            {
+                reason = "Profile_ID must be greater than 0.";
+                return false;
             }
 
             reason = string.Empty;
@@ -213,17 +227,20 @@ namespace Service
 
             if (Math.Abs(deltaPm) > pmThreshold)
             {
-                PMSpike?.Invoke($"delta PM={deltaPm.ToString(CultureInfo.InvariantCulture)}, threshold={pmThreshold.ToString(CultureInfo.InvariantCulture)}");
+                string direction = deltaPm > 0 ? "iznad očekivanog" : "ispod očekivanog";
+                PMSpike?.Invoke($"delta PM={deltaPm.ToString(CultureInfo.InvariantCulture)}, threshold={pmThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
             }
 
-            if (deltaStatorWinding > statorWThreshold)
+            if (Math.Abs(deltaStatorWinding) > statorWThreshold)
             {
-                StatorSpikeW?.Invoke($"delta Stator_Winding={deltaStatorWinding.ToString(CultureInfo.InvariantCulture)}, threshold={statorWThreshold.ToString(CultureInfo.InvariantCulture)}");
+                string direction = deltaStatorWinding > 0 ? "iznad očekivanog" : "ispod očekivanog";
+                StatorSpikeW?.Invoke($"delta Stator_Winding={deltaStatorWinding.ToString(CultureInfo.InvariantCulture)}, threshold={statorWThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
             }
 
-            if (deltaStatorTooth > statorTThreshold)
+            if (Math.Abs(deltaStatorTooth) > statorTThreshold)
             {
-                StatorSpikeT?.Invoke($"delta Stator_Tooth={deltaStatorTooth.ToString(CultureInfo.InvariantCulture)}, threshold={statorTThreshold.ToString(CultureInfo.InvariantCulture)}");
+                string direction = deltaStatorTooth > 0 ? "iznad očekivanog" : "ispod očekivanog";
+                StatorSpikeT?.Invoke($"delta Stator_Tooth={deltaStatorTooth.ToString(CultureInfo.InvariantCulture)}, threshold={statorTThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
             }
         }
 
@@ -235,11 +252,14 @@ namespace Service
                 return;
             }
 
-            if (sample.PM < pmMean * 0.75)
+            double lowerBound = pmMean * (1 - pmDeviationPercent);
+            double upperBound = pmMean * (1 + pmDeviationPercent);
+
+            if (sample.PM < lowerBound)
             {
                 OutOfBandWarning?.Invoke($"PM is below expected value: PM={sample.PM.ToString(CultureInfo.InvariantCulture)}, T_mean={pmMean.ToString(CultureInfo.InvariantCulture)}");
             }
-            else if (sample.PM > pmMean * 1.25)
+            else if (sample.PM > upperBound)
             {
                 OutOfBandWarning?.Invoke($"PM is above expected value: PM={sample.PM.ToString(CultureInfo.InvariantCulture)}, T_mean={pmMean.ToString(CultureInfo.InvariantCulture)}");
             }
