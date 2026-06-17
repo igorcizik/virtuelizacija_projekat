@@ -187,7 +187,7 @@ namespace Service
 
             if (sample.Torque > 48.5)
             {
-                reason = $"Torque value {sample.Torque.ToString(CultureInfo.InvariantCulture)} exceeds allowed maximum (45).";
+                reason = $"Torque value {sample.Torque.ToString(CultureInfo.InvariantCulture)} exceeds allowed maximum (48.5).";
                 return false;
             }
 
@@ -227,20 +227,20 @@ namespace Service
 
             if (Math.Abs(deltaPm) > pmThreshold)
             {
-                string direction = deltaPm > 0 ? "iznad očekivanog" : "ispod očekivanog";
-                PMSpike?.Invoke($"delta PM={deltaPm.ToString(CultureInfo.InvariantCulture)}, threshold={pmThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
+                string direction = deltaPm > 0 ? "above expected" : "below expected";
+                PMSpike?.Invoke($"delta PM={deltaPm.ToString(CultureInfo.InvariantCulture)}, threshold={pmThreshold.ToString(CultureInfo.InvariantCulture)}, {direction}");
             }
 
             if (Math.Abs(deltaStatorWinding) > statorWThreshold)
             {
-                string direction = deltaStatorWinding > 0 ? "iznad očekivanog" : "ispod očekivanog";
-                StatorSpikeW?.Invoke($"delta Stator_Winding={deltaStatorWinding.ToString(CultureInfo.InvariantCulture)}, threshold={statorWThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
+                string direction = deltaStatorWinding > 0 ? "above expected" : "below expected";
+                StatorSpikeW?.Invoke($"delta Stator_Winding={deltaStatorWinding.ToString(CultureInfo.InvariantCulture)}, threshold={statorWThreshold.ToString(CultureInfo.InvariantCulture)}, {direction}");
             }
 
             if (Math.Abs(deltaStatorTooth) > statorTThreshold)
             {
-                string direction = deltaStatorTooth > 0 ? "iznad očekivanog" : "ispod očekivanog";
-                StatorSpikeT?.Invoke($"delta Stator_Tooth={deltaStatorTooth.ToString(CultureInfo.InvariantCulture)}, threshold={statorTThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
+                string direction = deltaStatorTooth > 0 ? "above expected" : "below expected";
+                StatorSpikeT?.Invoke($"delta Stator_Tooth={deltaStatorTooth.ToString(CultureInfo.InvariantCulture)}, threshold={statorTThreshold.ToString(CultureInfo.InvariantCulture)}, {direction}");
             }
         }
 
