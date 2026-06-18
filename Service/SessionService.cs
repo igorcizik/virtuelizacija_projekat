@@ -196,7 +196,7 @@ namespace Service
 
             if (sample.Torque > 48.5)
             {
-                reason = $"Torque value {sample.Torque.ToString(CultureInfo.InvariantCulture)} exceeds allowed maximum (45).";
+                reason = $"Torque value {sample.Torque.ToString(CultureInfo.InvariantCulture)} exceeds allowed maximum (48.5).";
                 return false;
             }
 
