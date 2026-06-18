@@ -10,21 +10,41 @@ using System.ServiceModel;
 
 namespace Service
 {
+    public class MessageEventArgs : EventArgs
+    {
+        public string EventMessage { get; }
+
+        public MessageEventArgs(string eventMessage)
+        {
+            EventMessage = eventMessage;
+        }
+    }
+
+    public class SampleReceivedEventArgs : EventArgs
+    {
+        public MotorSample Sample { get; }
+        public int SampleNumber { get; }
+
+        public SampleReceivedEventArgs(MotorSample sample, int sampleNumber)
+        {
+            Sample = sample;
+            SampleNumber = sampleNumber;
+        }
+    }
+
     public class SessionService : ISession
     {
-        public delegate void TransferStartedHandler(string message);
-        public delegate void SampleReceivedHandler(MotorSample sample, int sampleNumber);
-        public delegate void TransferCompletedHandler(string message);
-        public delegate void WarningRaisedHandler(string message);
+        public delegate void MessageEventHandler(object sender, MessageEventArgs e);
+        public delegate void SampleReceivedEventHandler(object sender, SampleReceivedEventArgs e);
 
-        public event TransferStartedHandler OnTransferStarted;
-        public event SampleReceivedHandler OnSampleReceived;
-        public event TransferCompletedHandler OnTransferCompleted;
-        public event WarningRaisedHandler OnWarningRaised;
-        public event WarningRaisedHandler PMSpike;
-        public event WarningRaisedHandler StatorSpikeW;
-        public event WarningRaisedHandler StatorSpikeT;
-        public event WarningRaisedHandler OutOfBandWarning;
+        public event MessageEventHandler OnTransferStarted;
+        public event SampleReceivedEventHandler OnSampleReceived;
+        public event MessageEventHandler OnTransferCompleted;
+        public event MessageEventHandler OnWarningRaised;
+        public event MessageEventHandler PMSpike;
+        public event MessageEventHandler StatorSpikeW;
+        public event MessageEventHandler StatorSpikeT;
+        public event MessageEventHandler OutOfBandWarning;
 
         private static SessionStatus? currentStatus;
         private static SessionFileStorage sessionFileStorage;
@@ -39,14 +59,14 @@ namespace Service
 
         public SessionService()
         {
-            OnTransferStarted += Console.WriteLine;
-            OnSampleReceived += (sample, sampleNumber) => Console.WriteLine($"Transfer in progress... received sample #{sampleNumber}");
-            OnTransferCompleted += Console.WriteLine;
-            OnWarningRaised += message => Console.WriteLine("Warning: " + message);
-            PMSpike += message => OnWarningRaised?.Invoke("PMSpike: " + message);
-            StatorSpikeW += message => OnWarningRaised?.Invoke("StatorSpikeW: " + message);
-            StatorSpikeT += message => OnWarningRaised?.Invoke("StatorSpikeT: " + message);
-            OutOfBandWarning += message => OnWarningRaised?.Invoke("OutOfBandWarning: " + message);
+            OnTransferStarted += HandleTransferStarted;
+            OnSampleReceived += HandleSampleReceived;
+            OnTransferCompleted += HandleTransferCompleted;
+            OnWarningRaised += HandleWarningRaised;
+            PMSpike += HandlePMSpike;
+            StatorSpikeW += HandleStatorSpikeW;
+            StatorSpikeT += HandleStatorSpikeT;
+            OutOfBandWarning += HandleOutOfBandWarning;
         }
 
         public SessionResponse StartSession(Meta meta)
@@ -69,9 +89,9 @@ namespace Service
             sessionFileStorage?.Dispose();
             sessionFileStorage = new SessionFileStorage(storagePath);
 
-            OnTransferStarted?.Invoke("Transfer started. Status: IN_PROGRESS");
-            Console.WriteLine("Created files: measurements_session.csv and rejects.csv");
-            Console.WriteLine("Session initialized successfully.");
+            RaiseTransferStarted("Transfer started. Status: IN_PROGRESS");
+            WriteConsoleMessage(string.Empty, "Kreirani: measurements_session.csv i rejects.csv", ConsoleColor.DarkCyan);
+            WriteConsoleMessage("[ OK  ] ", "Sesija je uspešno inicijalizovana.", ConsoleColor.Green);
 
             return Response(ServerMessage.ACK, SessionStatus.IN_PROGRESS, "Session initialized successfully.");
         }
@@ -79,24 +99,23 @@ namespace Service
         public SessionResponse PushSample(MotorSample sample)
         {
             EnsureSessionInProgress();
-            OnSampleReceived?.Invoke(sample, ++receivedSamples);
+            RaiseSampleReceived(sample, ++receivedSamples);
 
             string rejectReason;
             if (!TryValidateSample(sample, out rejectReason))
             {
                 sessionFileStorage.WriteRejectedSample(sample, rejectReason);
-                Console.WriteLine("Sample rejected: " + rejectReason);
+                WriteConsoleMessage("[NACK ] ", "Uzorak je odbijen: " + rejectReason, ConsoleColor.Red);
                 return Response(ServerMessage.NACK, SessionStatus.IN_PROGRESS, rejectReason);
             }
 
-            CheckThresholds(sample);
             CheckSuddenChanges(sample);
             CheckRunningPmMean(sample);
             sessionFileStorage.WriteAcceptedSample(sample);
             acceptedSamples.Add(sample);
             previousAcceptedSample = sample;
 
-            Console.WriteLine("Sample accepted and written to measurements_session.csv.");
+            WriteConsoleMessage("[ ACK ] ", "Uzorak je prihvaćen i sačuvan.", ConsoleColor.Green);
             return Response(ServerMessage.ACK, SessionStatus.IN_PROGRESS, "Sample accepted.");
         }
 
@@ -110,9 +129,8 @@ namespace Service
                 }
 
                 currentStatus = SessionStatus.COMPLETED;
-                OnTransferCompleted?.Invoke("Transfer completed.");
-                Console.WriteLine("Status changed to: COMPLETED");
-                Console.WriteLine("Session closed successfully.\n");
+                RaiseTransferCompleted("Transfer completed.");
+                WriteConsoleMessage("[STATUS] ", "COMPLETED", ConsoleColor.Green);
 
                 return Response(ServerMessage.ACK, SessionStatus.COMPLETED, "Transfer completed. Session closed successfully.");
             }
@@ -167,22 +185,13 @@ namespace Service
                 return false;
             }
 
-            var rangeChecks = new[]
+            if (!TryValidateRange("PM", sample.PM, 0.0, 29.0, out reason) ||
+                !TryValidateRange("Stator_Winding", sample.Stator_Winding, 0.0, 30.0, out reason) ||
+                !TryValidateRange("Stator_Tooth", sample.Stator_Tooth, 0.0, 25.0, out reason) ||
+                !TryValidateRange("Stator_Yoke", sample.Stator_Yoke, 0.0, 140.0, out reason) ||
+                !TryValidateRange("Ambient", sample.Ambient, -40.0, 60.0, out reason))
             {
-                Tuple.Create("PM", sample.PM, 0.0, 29.0),
-                Tuple.Create("Stator_Winding", sample.Stator_Winding, 0.0, 30.0),
-                Tuple.Create("Stator_Tooth", sample.Stator_Tooth, 0.0, 25.0),
-                Tuple.Create("Stator_Yoke", sample.Stator_Yoke, 0.0, 140.0),
-                Tuple.Create("Ambient", sample.Ambient, -40.0, 60.0)
-            };
-
-            foreach (var check in rangeChecks)
-            {
-                if (check.Item2 <= check.Item3 || check.Item2 > check.Item4)
-                {
-                    reason = $"{check.Item1} value {check.Item2.ToString(CultureInfo.InvariantCulture)} is out of allowed range ({check.Item3.ToString(CultureInfo.InvariantCulture)}, {check.Item4.ToString(CultureInfo.InvariantCulture)}].";
-                    return false;
-                }
+                return false;
             }
 
             if (sample.Torque > 48.5)
@@ -201,17 +210,16 @@ namespace Service
             return true;
         }
 
-        private void CheckThresholds(MotorSample sample)
+        private static bool TryValidateRange(string name, double value, double min, double max, out string reason)
         {
-            foreach (var value in new[]
+            if (value <= min || value > max)
             {
-                Tuple.Create("Stator_Winding", sample.Stator_Winding, statorWThreshold),
-                Tuple.Create("Stator_Tooth", sample.Stator_Tooth, statorTThreshold),
-                Tuple.Create("PM", sample.PM, pmThreshold)
-            }.Where(x => x.Item2 > x.Item3))
-            {
-                OnWarningRaised?.Invoke($"{value.Item1} exceeded configured threshold: {value.Item2} > {value.Item3}");
+                reason = $"{name} value {value.ToString(CultureInfo.InvariantCulture)} is out of allowed range ({min.ToString(CultureInfo.InvariantCulture)}, {max.ToString(CultureInfo.InvariantCulture)}].";
+                return false;
             }
+
+            reason = string.Empty;
+            return true;
         }
 
         private void CheckSuddenChanges(MotorSample sample)
@@ -228,19 +236,19 @@ namespace Service
             if (Math.Abs(deltaPm) > pmThreshold)
             {
                 string direction = deltaPm > 0 ? "iznad očekivanog" : "ispod očekivanog";
-                PMSpike?.Invoke($"delta PM={deltaPm.ToString(CultureInfo.InvariantCulture)}, threshold={pmThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
+                RaisePMSpike($"delta PM={deltaPm.ToString(CultureInfo.InvariantCulture)}, threshold={pmThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
             }
 
             if (Math.Abs(deltaStatorWinding) > statorWThreshold)
             {
                 string direction = deltaStatorWinding > 0 ? "iznad očekivanog" : "ispod očekivanog";
-                StatorSpikeW?.Invoke($"delta Stator_Winding={deltaStatorWinding.ToString(CultureInfo.InvariantCulture)}, threshold={statorWThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
+                RaiseStatorSpikeW($"delta Stator_Winding={deltaStatorWinding.ToString(CultureInfo.InvariantCulture)}, threshold={statorWThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
             }
 
             if (Math.Abs(deltaStatorTooth) > statorTThreshold)
             {
                 string direction = deltaStatorTooth > 0 ? "iznad očekivanog" : "ispod očekivanog";
-                StatorSpikeT?.Invoke($"delta Stator_Tooth={deltaStatorTooth.ToString(CultureInfo.InvariantCulture)}, threshold={statorTThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
+                RaiseStatorSpikeT($"delta Stator_Tooth={deltaStatorTooth.ToString(CultureInfo.InvariantCulture)}, threshold={statorTThreshold.ToString(CultureInfo.InvariantCulture)}, smer: {direction}");
             }
         }
 
@@ -257,12 +265,119 @@ namespace Service
 
             if (sample.PM < lowerBound)
             {
-                OutOfBandWarning?.Invoke($"PM is below expected value: PM={sample.PM.ToString(CultureInfo.InvariantCulture)}, T_mean={pmMean.ToString(CultureInfo.InvariantCulture)}");
+                RaiseOutOfBandWarning($"PM is below expected value: PM={sample.PM.ToString(CultureInfo.InvariantCulture)}, T_mean={pmMean.ToString(CultureInfo.InvariantCulture)}");
             }
             else if (sample.PM > upperBound)
             {
-                OutOfBandWarning?.Invoke($"PM is above expected value: PM={sample.PM.ToString(CultureInfo.InvariantCulture)}, T_mean={pmMean.ToString(CultureInfo.InvariantCulture)}");
+                RaiseOutOfBandWarning($"PM is above expected value: PM={sample.PM.ToString(CultureInfo.InvariantCulture)}, T_mean={pmMean.ToString(CultureInfo.InvariantCulture)}");
             }
+        }
+
+        public void RaiseTransferStarted(string message)
+        {
+            if (OnTransferStarted != null)
+            {
+                OnTransferStarted(this, new MessageEventArgs(message));
+            }
+        }
+
+        public void RaiseSampleReceived(MotorSample sample, int sampleNumber)
+        {
+            if (OnSampleReceived != null)
+            {
+                OnSampleReceived(this, new SampleReceivedEventArgs(sample, sampleNumber));
+            }
+        }
+
+        public void RaiseTransferCompleted(string message)
+        {
+            if (OnTransferCompleted != null)
+            {
+                OnTransferCompleted(this, new MessageEventArgs(message));
+            }
+        }
+
+        public void RaiseWarning(string message)
+        {
+            if (OnWarningRaised != null)
+            {
+                OnWarningRaised(this, new MessageEventArgs(message));
+            }
+        }
+
+        public void RaisePMSpike(string message)
+        {
+            if (PMSpike != null)
+            {
+                PMSpike(this, new MessageEventArgs(message));
+            }
+        }
+
+        public void RaiseStatorSpikeW(string message)
+        {
+            if (StatorSpikeW != null)
+            {
+                StatorSpikeW(this, new MessageEventArgs(message));
+            }
+        }
+
+        public void RaiseStatorSpikeT(string message)
+        {
+            if (StatorSpikeT != null)
+            {
+                StatorSpikeT(this, new MessageEventArgs(message));
+            }
+        }
+
+        public void RaiseOutOfBandWarning(string message)
+        {
+            if (OutOfBandWarning != null)
+            {
+                OutOfBandWarning(this, new MessageEventArgs(message));
+            }
+        }
+
+        private void HandleTransferStarted(object sender, MessageEventArgs e)
+        {
+            WriteConsoleMessage(string.Empty, e.EventMessage, ConsoleColor.Cyan);
+        }
+
+        private void HandleSampleReceived(object sender, SampleReceivedEventArgs e)
+        {
+            WriteConsoleMessage(
+                $"[{e.SampleNumber,3}] ",
+                $"Primljen uzorak | PM: {e.Sample.PM,8:F3} | Winding: {e.Sample.Stator_Winding,8:F3} | Tooth: {e.Sample.Stator_Tooth,8:F3}",
+                ConsoleColor.Gray);
+        }
+
+        private void HandleTransferCompleted(object sender, MessageEventArgs e)
+        {
+            WriteConsoleMessage("[KRAJ ] ", e.EventMessage, ConsoleColor.Green);
+        }
+
+        private void HandleWarningRaised(object sender, MessageEventArgs e)
+        {
+            WriteConsoleMessage("[WARN ] ", e.EventMessage, ConsoleColor.Yellow);
+        }
+
+        private void HandlePMSpike(object sender, MessageEventArgs e)
+        {
+            RaiseWarning("PMSpike: " + e.EventMessage);
+        }
+
+        private void HandleStatorSpikeW(object sender, MessageEventArgs e)
+        {
+            RaiseWarning("StatorSpikeW: " + e.EventMessage);
+        }
+
+        private void HandleStatorSpikeT(object sender, MessageEventArgs e)
+        {
+            RaiseWarning("StatorSpikeT: " + e.EventMessage);
+        }
+
+        private void HandleOutOfBandWarning(object sender, MessageEventArgs e)
+        {
+            RaiseWarning("OutOfBandWarning: " + e.EventMessage);
         }
 
         private static void ThrowDataFormat(string message)
@@ -273,6 +388,13 @@ namespace Service
         private static void ThrowSessionState(string message)
         {
             throw new FaultException<SessionStateFault>(new SessionStateFault(message));
+        }
+        private static void WriteConsoleMessage(string prefix, string message, ConsoleColor color)
+        {
+            Console.ForegroundColor = color;
+            Console.Write(prefix);
+            Console.ResetColor();
+            Console.WriteLine(message);
         }
     }
 }
