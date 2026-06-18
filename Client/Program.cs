@@ -16,6 +16,8 @@ namespace Client
             ChannelFactory<ISession> factory = null;
             ISession proxy = null;
 
+            Console.Title = "PMSM Motor Monitoring - Klijent";
+
             string csvPath = ConfigurationManager.AppSettings["Csv_path"];
             string csvLogPath = ConfigurationManager.AppSettings["Csv_log_path"];
             int maxRows = int.Parse(ConfigurationManager.AppSettings["Max_rows"]);
@@ -25,11 +27,12 @@ namespace Client
             {
                
                 List<MotorSample> samples;
-                Console.WriteLine("Client spreman za slanje podataka");
+                WriteInfo("Klijent je spreman za slanje podataka.");
                 using (MotorCsvReader reader = new MotorCsvReader(csvPath, csvLogPath, maxRows))
                 {
-                    Console.WriteLine("Ucitavanje podataka...");
+                    WriteInfo($"Učitavanje podataka iz: {csvPath}");
                     samples = reader.ReadFirstParsableSamples();
+                    WriteSuccess($"Učitano validnih uzoraka: {samples.Count}");
 
                     factory = new ChannelFactory<ISession>("SessionService");
                     proxy = factory.CreateChannel();
@@ -37,27 +40,26 @@ namespace Client
                     Meta meta = new Meta(true, true, true, true, true, true, true);
 
                     SessionResponse startResponse = proxy.StartSession(meta);
-                    Console.WriteLine("StartSession: " + startResponse.Message + ", Status: " + startResponse.Status + ", Details: " + startResponse.Details);
+                    WriteResponse("START", startResponse);
 
                     int counter = 0;
-                    Console.WriteLine("Slanje podataka...");
+                    Console.WriteLine();
+                    WriteSection($"SLANJE UZORAKA ({samples.Count})");
                     Thread.Sleep(500);
 
                     foreach (MotorSample sample in samples)
                     {
                         counter++;
 
-                        Console.WriteLine();
-                        Console.WriteLine($"Šaljem sample #{counter}...");
-
                         SessionResponse response = proxy.PushSample(sample);
-                        Console.WriteLine($"Odgovor za sample #{counter}: {response.Message}, Status: {response.Status}, Details: {response.Details}");
+                        WriteSampleResponse(counter, samples.Count, response);
 
                         Thread.Sleep(100);
                     }
 
                     SessionResponse endResponse = proxy.EndSession();
-                    Console.WriteLine("EndSession: " + endResponse.Message + ", Status: " + endResponse.Status + ", Details: " + endResponse.Details);
+                    Console.WriteLine();
+                    WriteResponse("KRAJ", endResponse);
 
                     ((IClientChannel)proxy).Close();
                     factory.Close();
@@ -67,21 +69,23 @@ namespace Client
             }
             catch (Exception e)
             {
-                Console.WriteLine("ERROR: " + e.Message);
+                WriteError(e.Message);
 
                 if (proxy != null)
                 {
                     ((IClientChannel)proxy).Abort();
-                    Console.WriteLine("WCF kanal je zatvoren preko Abort.");
+                    WriteWarning("WCF kanal je prinudno zatvoren.");
                 }
 
                 if (factory != null)
                 {
                     factory.Abort();
-                    Console.WriteLine("ChannelFactory je zatvoren preko Abort.");
+                    WriteWarning("ChannelFactory je prinudno zatvoren.");
                 }
             }
 
+            Console.WriteLine();
+            WriteInfo("Pritisnite ENTER za izlaz.");
             Console.ReadLine();
 
             /**SIMULACIJA PREKIDA
@@ -137,6 +141,65 @@ namespace Client
             }
 
             Console.ReadLine();**/
+        }
+
+        private static void WriteSection(string title)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"--- {title} ---");
+            Console.ResetColor();
+        }
+
+        private static void WriteInfo(string message)
+        {
+            WriteColored("[INFO] ", message, ConsoleColor.Gray);
+        }
+
+        private static void WriteSuccess(string message)
+        {
+            WriteColored("[ OK ] ", message, ConsoleColor.Green);
+        }
+
+        private static void WriteWarning(string message)
+        {
+            WriteColored("[WARN] ", message, ConsoleColor.Yellow);
+        }
+
+        private static void WriteError(string message)
+        {
+            WriteColored("[ERR ] ", message, ConsoleColor.Red);
+        }
+
+        private static void WriteResponse(string operation, SessionResponse response)
+        {
+            ConsoleColor color = response.Message == ServerMessage.ACK
+                ? ConsoleColor.Green
+                : ConsoleColor.Yellow;
+
+            WriteColored(
+                $"[{operation,-5}] ",
+                $"{response.Message,-4} | Status: {response.Status,-11} | {response.Details}",
+                color);
+        }
+
+        private static void WriteSampleResponse(int number, int total, SessionResponse response)
+        {
+            ConsoleColor color = response.Message == ServerMessage.ACK
+                ? ConsoleColor.Green
+                : ConsoleColor.Yellow;
+
+            WriteColored(
+                $"[{number,3}/{total,-3}] ",
+                $"{response.Message,-4} | {response.Details}",
+                color);
+        }
+
+        private static void WriteColored(string prefix, string message, ConsoleColor color)
+        {
+            Console.ForegroundColor = color;
+            Console.Write(prefix);
+            Console.ResetColor();
+            Console.WriteLine(message);
         }
     }
 }
